@@ -1,9 +1,23 @@
+import os.path
 import pandas as pd
+import pickle
 
 
 class FactionStats:
     def __init__(self):
-        pass
+
+        if os.path.isfile('factionstat.dat'):
+            self.factionstat = self.fn_load_object('factionstat.dat')
+        else:
+            self.factionstat={}
+
+    def fn_load_object(self, sFileName):
+
+        File = open(sFileName, "r")
+        Object = pickle.load(File)
+        File.close()
+
+        return Object
 
     def fn_pull_data_from_eddb(self, target_id=14271):
         # Canonn faction ID is 14271
@@ -46,6 +60,17 @@ class FactionStats:
 
         return systems_target, factions_target
 
+    def fn_save_object(self, object, sFileName):
+
+        File=open(sFileName, "w")
+        pickle.dump(object, File)
+        File.close()
+
+    def fn_save_data(self):
+        # save all data before exit
+
+        self.fn_save_object(self.factionstat, 'factionstat.dat')
+
 
 # main program from command line
 
@@ -55,6 +80,4 @@ if __name__ == '__main__':
     systems, factions = facinst.fn_pull_data_from_eddb()
     print systems
     print factions
-    pass
-
-
+    facinst.fn_save_data()
