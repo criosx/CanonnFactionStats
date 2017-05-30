@@ -6,10 +6,15 @@ import pickle
 class FactionStats:
     def __init__(self):
 
+        # load dictionary with stat data from file
+        # structure of dictionary is {system name: }
         if os.path.isfile('factionstat.dat'):
             self.factionstat = self.fn_load_object('factionstat.dat')
         else:
             self.factionstat={}
+
+    def fn_add_data(self, systems, factions):
+        pass
 
     def fn_load_object(self, sFileName):
 
@@ -55,6 +60,7 @@ class FactionStats:
                     # else:
                         # print 'Cannot read data for: ', system
 
+        # filter initial json files by identified systems and faction names
         systems_target = systems_populated.loc[system_names_target]
         factions_target = factions.loc[faction_names_target]
 
@@ -78,6 +84,5 @@ if __name__ == '__main__':
 
     facinst = FactionStats()
     systems, factions = facinst.fn_pull_data_from_eddb()
-    print systems
-    print factions
+    facinst.fn_add_data(systems,factions)
     facinst.fn_save_data()
