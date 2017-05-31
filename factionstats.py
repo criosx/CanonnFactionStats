@@ -65,8 +65,12 @@ class FactionStats:
         snapshot = self.fn_get_system_snapshots(self.factionstat[-1][1], self.factionstat[-1][2])
         for system in snapshot:
 
+            # Create current snapshots and save the data for future plotting
+
             snapshot[system].sort_index()
             snapshot[system].to_csv('./plotdata/'+system+'_snapshot.dat', index=False)
+
+            # Use matplotlib to create plots
 
             labels= snapshot[system]['Faction'].tolist()
             sizes = snapshot[system]['Influence'].tolist()
@@ -84,10 +88,6 @@ class FactionStats:
             ax1.axis('equal')
 
             fig1.savefig('./plots/'+system+'_snapshot.png')
-
-
-
-
 
     def fn_pull_data_from_eddb(self, target_id=14271):
         # Canonn faction ID is 14271
