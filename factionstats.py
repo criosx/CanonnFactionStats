@@ -2,7 +2,6 @@ import os.path
 import pandas as pd
 import pickle
 import time
-import datetime
 import matplotlib.pyplot as plt
 
 
@@ -40,9 +39,9 @@ class FactionStats:
             for faction in factions_present:
                 fInfluence = faction['influence']
                 strState = faction['state']
-                strUpdated = str(systems.loc[system, 'updated_at'])
+                Updated = systems.loc[system, 'updated_at']
                 strFaction = factions.loc[faction['minor_faction_id'],'name']
-                data.loc[data.shape[0]]=[strFaction, fInfluence, strState, strUpdated]
+                data.loc[data.shape[0]]=[strFaction, fInfluence, strState, Updated]
             snapshot[system] = data.copy()
 
         return snapshot
@@ -82,7 +81,7 @@ class FactionStats:
                     explode.append(0.0)
 
             fig1, ax1 = plt.subplots()
-            fig1.suptitle(system+' @ '+snapshot[system]['Last Time Updated'].tolist()[0])
+            fig1.suptitle(system+' @ '+str(snapshot[system]['Last Time Updated'].tolist()[0]))
             ax1.pie(sizes, explode=explode, labels=labels, autopct='%1.1f%%',
                     shadow=True, startangle=90)
             ax1.axis('equal')
@@ -92,10 +91,10 @@ class FactionStats:
     def fn_pull_data_from_eddb(self, target_id=14271):
         # Canonn faction ID is 14271
 
-        # systems_populated = pd.read_json('https://eddb.io/archive/v5/systems_populated.json')
-        systems_populated = pd.read_json('~/Desktop/systems_populated.json')
-        # factions = pd.read_json('https://eddb.io/archive/v5/factions.json')
-        factions = pd.read_json('~/Desktop/factions.json')
+        systems_populated = pd.read_json('https://eddb.io/archive/v5/systems_populated.json')
+        # systems_populated = pd.read_json('~/Desktop/systems_populated.json')
+        factions = pd.read_json('https://eddb.io/archive/v5/factions.json')
+        # factions = pd.read_json('~/Desktop/factions.json')
 
         # setup dataframes for extracting systems in which Canonn is present and
         # reduce the faction dataframe to entries only for factions that are in Canonn space
@@ -148,7 +147,7 @@ class FactionStats:
 if __name__ == '__main__':
 
     factionstats = FactionStats()
-    #systems, factions = factionstats.fn_pull_data_from_eddb()
-    #factionstats.fn_add_data(systems,factions)
-    #factionstats.fn_save_data()
+    systems, factions = factionstats.fn_pull_data_from_eddb()
+    factionstats.fn_add_data(systems,factions)
+    factionstats.fn_save_data()
     factionstats.fn_plot_system_snapshots()
