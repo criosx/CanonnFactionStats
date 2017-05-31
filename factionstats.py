@@ -1,20 +1,27 @@
 import os.path
 import pandas as pd
 import pickle
+import time
 
 
 class FactionStats:
     def __init__(self):
+        # load list with stat data from file
+        # structure of list is [[time, systems pandas dataframe, factions pandas dataframe]]
 
-        # load dictionary with stat data from file
-        # structure of dictionary is {system name: }
-        if os.path.isfile('factionstat.dat'):
-            self.factionstat = self.fn_load_object('factionstat.dat')
+        if os.path.isfile('./statdata/factionstat.dat'):
+            self.factionstat = self.fn_load_object('./statdata/factionstat.dat')
         else:
-            self.factionstat={}
+            self.factionstat=[]
 
     def fn_add_data(self, systems, factions):
-        pass
+        # add systems and factions Pandas frame as long as it is new
+        # time stamp is just for object inspection purposes, does not check when the previous
+        # entry to the stat data list was appended
+
+        if self.factionstat == [] or \
+                not (self.factionstat[-1][1].equals(systems) and self.factionstat[-1][2].equals(factions)):
+            self.factionstat.append([time.asctime(), systems, factions])
 
     def fn_load_object(self, sFileName):
 
@@ -75,14 +82,14 @@ class FactionStats:
     def fn_save_data(self):
         # save all data before exit
 
-        self.fn_save_object(self.factionstat, 'factionstat.dat')
+        self.fn_save_object(self.factionstat, './statdata/factionstat.dat')
 
 
 # main program from command line
 
 if __name__ == '__main__':
 
-    facinst = FactionStats()
-    systems, factions = facinst.fn_pull_data_from_eddb()
-    facinst.fn_add_data(systems,factions)
-    facinst.fn_save_data()
+    factionstats = FactionStats()
+    systems, factions = factionstats.fn_pull_data_from_eddb()
+    factionstats.fn_add_data(systems,factions)
+    factionstats.fn_save_data()
