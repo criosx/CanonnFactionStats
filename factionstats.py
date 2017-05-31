@@ -13,16 +13,7 @@ class FactionStats:
         if os.path.isfile('./statdata/factionstat.dat'):
             self.factionstat = self.fn_load_object('./statdata/factionstat.dat')
         else:
-            self.factionstat=[]
-
-    def fn_add_data(self, systems, factions):
-        # add systems and factions Pandas frame as long as it is new
-        # time stamp is just for object inspection purposes, does not check when the previous
-        # entry to the stat data list was appended
-
-        if self.factionstat == [] or \
-                not (self.factionstat[-1][1].equals(systems) and self.factionstat[-1][2].equals(factions)):
-            self.factionstat.append([time.asctime(), systems, factions])
+            self.factionstat = []
 
     def fn_get_system_snapshots(self, systems, factions):
         # Creates a dictionary of systems containing pandas dataframe snapshots
@@ -37,22 +28,39 @@ class FactionStats:
             data = pd.DataFrame(columns=['Faction', 'Influence', 'Faction State', 'Last Time Updated'])
             factions_present = systems.loc[system, 'minor_faction_presences']
             for faction in factions_present:
-                fInfluence = faction['influence']
-                strState = faction['state']
-                Updated = systems.loc[system, 'updated_at']
-                strFaction = factions.loc[faction['minor_faction_id'],'name']
-                data.loc[data.shape[0]]=[strFaction, fInfluence, strState, Updated]
+                influence = faction['influence']
+                state = faction['state']
+                updated = systems.loc[system, 'updated_at']
+                factionname = factions.loc[faction['minor_faction_id'], 'name']
+                data.loc[data.shape[0]] = [factionname, influence, state, updated]
             snapshot[system] = data.copy()
 
         return snapshot
 
-    def fn_load_object(self, sFileName):
+    def fn_load_object(self, filename):
 
-        File = open(sFileName, "r")
-        Object = pickle.load(File)
-        File.close()
+        fi = open(filename, "r")
+        po = pickle.load(fi)
+        fi.close()
 
-        return Object
+        return po
+
+    def fn_plot_system_history(self):
+        # Plots the influence history of a given system saves data and plots
+        # Format:
+        # Time Faction1 Faction2 ...
+        # ...  ...      ...      ...
+        # ...  ...      ...      ...
+
+        # Create a list of snapshots over a given time period
+
+        # Get a list of all involved factions
+
+        # Create Data
+
+        # Create Plots
+
+        pass
 
     def fn_plot_system_snapshots(self):
         # Creates a file that can be used for plotting system snapshots (most recent time)
@@ -71,7 +79,7 @@ class FactionStats:
 
             # Use matplotlib to create plots
 
-            labels= snapshot[system]['Faction'].tolist()
+            labels = snapshot[system]['Faction'].tolist()
             sizes = snapshot[system]['Influence'].tolist()
             explode = []
             for name in labels:
@@ -128,13 +136,19 @@ class FactionStats:
         systems_target = systems_populated.loc[system_names_target]
         factions_target = factions.loc[faction_names_target]
 
-        return systems_target, factions_target
+        # add systems and factions Pandas frame as long as it is new
+        # time stamp is just for object inspection purposes, does not check when the previous
+        # entry to the stat data list was appended
 
-    def fn_save_object(self, object, sFileName):
+        if self.factionstat == [] or not (self.factionstat[-1][1].equals(systems_target)
+                                          and self.factionstat[-1][2].equals(factions_target)):
+            self.factionstat.append([time.asctime(), systems_target, factions_target])
 
-        File=open(sFileName, "w")
-        pickle.dump(object, File)
-        File.close()
+    def fn_save_object(self, obj, filename):
+
+        fi = open(filename, "w")
+        pickle.dump(obj, fi)
+        fi.close()
 
     def fn_save_data(self):
         # save all data before exit
@@ -147,7 +161,7 @@ class FactionStats:
 if __name__ == '__main__':
 
     factionstats = FactionStats()
-    systems, factions = factionstats.fn_pull_data_from_eddb()
-    factionstats.fn_add_data(systems,factions)
+    factionstats.fn_pull_data_from_eddb()
     factionstats.fn_save_data()
     factionstats.fn_plot_system_snapshots()
+    factionstats.fn_plot_system_history()
