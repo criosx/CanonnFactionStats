@@ -23,6 +23,28 @@ class FactionStats:
                 not (self.factionstat[-1][1].equals(systems) and self.factionstat[-1][2].equals(factions)):
             self.factionstat.append([time.asctime(), systems, factions])
 
+    def fn_get_system_snapshots(self, systems, factions):
+        # Creates a dictionary of systems containing pandas dataframe snapshots
+        # Format of the data frame:
+        # Faction Influence FactionState LastTimeUpdated
+        # ...     ...       ...           ...
+        # ...     ...       ...           ...
+
+        snapshot = {}
+
+        for system in systems.index:
+            data = pd.DataFrame(columns=['Faction', 'Influence', 'Faction State', 'Last Time Updated'])
+            factions_present = systems.loc[system, 'minor_faction_presences']
+            for faction in factions_present:
+                fInfluence = faction['influence']
+                strState = faction['state']
+                strUpdated = systems.loc[system, 'updated_at']
+                strFaction = factions.loc[faction['minor_faction_id'],'name']
+                data.loc[data.shape[0]]=[strFaction, fInfluence, strState, strUpdated]
+            snapshot[system] = data.copy()
+
+        return snapshot
+
     def fn_load_object(self, sFileName):
 
         File = open(sFileName, "r")
@@ -30,6 +52,18 @@ class FactionStats:
         File.close()
 
         return Object
+
+    def fn_plot_system_snapshots(self):
+        # Creates a file that can be used for plotting system snapshots (most recent time)
+        # Format:
+        # Faction Influence FactionState LastTimeUpdated
+        # ...     ...       ...           ...
+        # ...     ...       ...           ...
+
+        snapshot = self.fn_get_system_snapshots(self.factionstat[-1][1], self.factionstat[-1][2])
+        for system in snapshot:
+            snapshot[system].to_csv('./plotdata/'+system+'_plotdata.dat', index=False)
+
 
     def fn_pull_data_from_eddb(self, target_id=14271):
         # Canonn faction ID is 14271
@@ -90,6 +124,7 @@ class FactionStats:
 if __name__ == '__main__':
 
     factionstats = FactionStats()
-    systems, factions = factionstats.fn_pull_data_from_eddb()
-    factionstats.fn_add_data(systems,factions)
-    factionstats.fn_save_data()
+    #systems, factions = factionstats.fn_pull_data_from_eddb()
+    #factionstats.fn_add_data(systems,factions)
+    #factionstats.fn_save_data()
+    factionstats.fn_plot_system_snapshots()
