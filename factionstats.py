@@ -2,6 +2,8 @@ import os.path
 import pandas as pd
 import pickle
 import time
+import datetime
+import matplotlib.pyplot as plt
 
 
 class FactionStats:
@@ -38,7 +40,7 @@ class FactionStats:
             for faction in factions_present:
                 fInfluence = faction['influence']
                 strState = faction['state']
-                strUpdated = systems.loc[system, 'updated_at']
+                strUpdated = str(systems.loc[system, 'updated_at'])
                 strFaction = factions.loc[faction['minor_faction_id'],'name']
                 data.loc[data.shape[0]]=[strFaction, fInfluence, strState, strUpdated]
             snapshot[system] = data.copy()
@@ -62,7 +64,29 @@ class FactionStats:
 
         snapshot = self.fn_get_system_snapshots(self.factionstat[-1][1], self.factionstat[-1][2])
         for system in snapshot:
-            snapshot[system].to_csv('./plotdata/'+system+'_plotdata.dat', index=False)
+
+            snapshot[system].sort_index()
+            snapshot[system].to_csv('./plotdata/'+system+'_snapshot.dat', index=False)
+
+            labels= snapshot[system]['Faction'].tolist()
+            sizes = snapshot[system]['Influence'].tolist()
+            explode = []
+            for name in labels:
+                if name == 'Canonn':
+                    explode.append(0.1)
+                else:
+                    explode.append(0.0)
+
+            fig1, ax1 = plt.subplots()
+            fig1.suptitle(system+' @ '+snapshot[system]['Last Time Updated'].tolist()[0])
+            ax1.pie(sizes, explode=explode, labels=labels, autopct='%1.1f%%',
+                    shadow=True, startangle=90)
+            ax1.axis('equal')
+
+            fig1.savefig('./plots/'+system+'_snapshot.png')
+
+
+
 
 
     def fn_pull_data_from_eddb(self, target_id=14271):
