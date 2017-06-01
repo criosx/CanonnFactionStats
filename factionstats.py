@@ -52,15 +52,62 @@ class FactionStats:
         # ...  ...      ...      ...
         # ...  ...      ...      ...
 
-        # Create a list of snapshots over a given time period
+        # Create a list of snapshots over the last 90 days
 
-        # Get a list of all involved factions
+        history=[]
+        for entry in self.factionstat:
+            if (time.time()-time.mktime(time.strptime(entry[0]))) < (90*24*60*60+1):
+                history.append(self.fn_get_system_snapshots(entry[1], entry[2]))
 
-        # Create Data
+        # Get a list of all occupied systems
 
-        # Create Plots
+        systemlist=[]
+        for entry in history:
+            for system in entry:
+                if system not in systemlist:
+                    systemlist.append(system)
 
-        pass
+        #Create data and plots for all systems
+        for system in systemlist:
+
+            # Get list of all factions
+            factionlist=[]
+            for entry in history:
+                for faction in entry[system]['Faction'].tolist():
+                    if faction not in factionlist:
+                        factionlist.append(faction)
+
+            # Create Data
+            factionlist.sort()
+            headerline = ['Date']+factionlist
+            data = pd.DataFrame(columns=headerline)
+
+            for entry in history:
+                nextline = []
+                for faction in factionlist:
+                    if faction in entry[system]['Faction'].tolist():
+                        i = entry[system]['Faction'].tolist().index(faction)
+                        nextline.append(entry[system]['Influence'].tolist()[i])
+                        date = [entry[system]['Last Time Updated'].tolist()[0]]
+                    else:
+                        nextline.append(0.0)
+
+                data.loc[data.shape[0]] = [date]+nextline
+
+            data.to_csv('./plotdata/' + system + '_history.dat', index=False)
+
+            # Create Plots
+
+            fig, ax = plt.subplots(nrows=1, ncols=1)
+            for faction in factionlist:
+                ax.plot(data['Date'].tolist(), data[faction].tolist(),'-',label=faction)
+            ax.legend()
+            ax.set_xlabel('Date')
+            ax.set_ylabel('Influence (%)')
+            fig.autofmt_xdate()
+            fig.suptitle(system)
+            fig.savefig('./plots/'+ system + '_history.png')
+            plt.close(fig)
 
     def fn_plot_system_snapshots(self):
         # Creates a file that can be used for plotting system snapshots (most recent time)
@@ -137,8 +184,6 @@ class FactionStats:
         factions_target = factions.loc[faction_names_target]
 
         # add systems and factions Pandas frame as long as it is new
-        # time stamp is just for object inspection purposes, does not check when the previous
-        # entry to the stat data list was appended
 
         if self.factionstat == [] or not (self.factionstat[-1][1].equals(systems_target)
                                           and self.factionstat[-1][2].equals(factions_target)):
@@ -161,7 +206,7 @@ class FactionStats:
 if __name__ == '__main__':
 
     factionstats = FactionStats()
-    factionstats.fn_pull_data_from_eddb()
-    factionstats.fn_save_data()
-    factionstats.fn_plot_system_snapshots()
+    #factionstats.fn_pull_data_from_eddb()
+    #factionstats.fn_save_data()
+    #factionstats.fn_plot_system_snapshots()
     factionstats.fn_plot_system_history()
