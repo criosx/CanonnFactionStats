@@ -3,6 +3,8 @@ import pandas as pd
 import pickle
 import time
 import matplotlib.pyplot as plt
+import plotly.plotly as py
+import plotly.graph_objs as go
 
 
 class FactionStats:
@@ -54,6 +56,8 @@ class FactionStats:
 
         # Create a list of snapshots over the last 90 days
 
+        py.sign_in('criosx','oey3dlS7gKLJLadOuKsl')
+
         history=[]
         for entry in self.factionstat:
             if (time.time()-time.mktime(time.strptime(entry[0]))) < (90*24*60*60+1):
@@ -88,7 +92,7 @@ class FactionStats:
                     if faction in entry[system]['Faction'].tolist():
                         i = entry[system]['Faction'].tolist().index(faction)
                         nextline.append(entry[system]['Influence'].tolist()[i])
-                        date = [entry[system]['Last Time Updated'].tolist()[0]]
+                        date = entry[system]['Last Time Updated'].tolist()[0]
                     else:
                         nextline.append(0.0)
 
@@ -97,8 +101,9 @@ class FactionStats:
             data.to_csv('./plotdata/' + system + '_history.dat', index=False)
 
             # Create Plots
-
+            # Matplotlib
             fig, ax = plt.subplots(nrows=1, ncols=1)
+            traces=[]
             for faction in factionlist:
                 ax.plot(data['Date'].tolist(), data[faction].tolist(),'-',label=faction)
             ax.legend()
@@ -108,6 +113,20 @@ class FactionStats:
             fig.suptitle(system)
             fig.savefig('./plots/'+ system + '_history.png')
             plt.close(fig)
+
+            # Plotly
+            for faction in factionlist:
+                trace = go.Scatter(x=data['Date'].tolist(), y=data[faction].tolist(), mode='lines', name=faction)
+                traces.append(trace)
+
+            plotformat = go.Layout(title=system, xaxis=dict(title='Date', mirror=True, showline=True),
+                                   yaxis=dict(title='Influence', mirror=True, showline=True))
+
+
+            plotlyfig = go.Figure(data=traces, layout=plotformat)
+            py.plot(plotlyfig,filename=system + '_history.png')
+
+            #plotly.offline.plot({'data': traces, 'layout': plotformat})
 
     def fn_plot_system_snapshots(self):
         # Creates a file that can be used for plotting system snapshots (most recent time)
