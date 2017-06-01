@@ -6,6 +6,9 @@ import matplotlib.pyplot as plt
 import plotly.plotly as py
 import plotly.graph_objs as go
 import plotly
+import io
+import requests
+
 
 
 class FactionStats:
@@ -105,7 +108,8 @@ class FactionStats:
             # Create Plots with Plotly
             traces = []
             for faction in factionlist:
-                trace = go.Scatter(x=data['Date'].tolist(), y=data[faction].tolist(), mode='lines', name=faction)
+                trace = go.Scatter(x=data['Date'].tolist(), y=data[faction].tolist(), mode='lines+markers'
+                                   , name=faction, line=dict(shape='spline'))
                 traces.append(trace)
 
             plotformat = go.Layout(title=system, xaxis=dict(title='Date', mirror=True, showline=True),
@@ -119,7 +123,7 @@ class FactionStats:
             except:
                 print ('Failed to publish '+system+'_history.png')
 
-            plotly.offline.plot(plotlyfig, filename='./plots/'+ system + '_history.html', auto_open=False)
+            #plotly.offline.plot(plotlyfig, filename='./plots/'+ system + '_history.html', auto_open=False)
             py.image.save_as(plotlyfig, filename='./plots/'+ system + '_history.png')
 
 
@@ -165,10 +169,18 @@ class FactionStats:
     def fn_pull_data_from_eddb(self, target_id=14271):
         # Canonn faction ID is 14271
 
-        # systems_populated = pd.read_json('https://eddb.io/archive/v5/systems_populated.json')
-        systems_populated = pd.read_json('~/Desktop/systems_populated.json')
-        # factions = pd.read_json('https://eddb.io/archive/v5/factions.json')
-        factions = pd.read_json('~/Desktop/factions.json')
+        # method from https://stackoverflow.com/questions/32400867/pandas-read-csv-from-url to deal with SSL sites
+        url = 'https://eddb.io/archive/v5/systems_populated.json'
+        s = requests.get(url).content
+        systems_populated = pd.read_json(io.StringIO(s.decode('utf-8')))
+        #systems_populated = pd.read_json('https://eddb.io/archive/v5/systems_populated.json')
+        #systems_populated = pd.read_json('~/Desktop/systems_populated.json')
+
+        url = 'https://eddb.io/archive/v5/factions.json'
+        s = requests.get(url).content
+        factions = pd.read_json(io.StringIO(s.decode('utf-8')))
+        #factions = pd.read_json('https://eddb.io/archive/v5/factions.json')
+        #factions = pd.read_json('~/Desktop/factions.json')
 
         # setup dataframes for extracting systems in which Canonn is present and
         # reduce the faction dataframe to entries only for factions that are in Canonn space
@@ -227,5 +239,5 @@ if __name__ == '__main__':
     factionstats = FactionStats()
     #factionstats.fn_pull_data_from_eddb()
     #factionstats.fn_save_data()
-    #factionstats.fn_plot_system_snapshots()
+    factionstats.fn_plot_system_snapshots()
     factionstats.fn_plot_system_history()
