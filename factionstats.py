@@ -5,6 +5,7 @@ import time
 import matplotlib.pyplot as plt
 import plotly.plotly as py
 import plotly.graph_objs as go
+import plotly
 
 
 class FactionStats:
@@ -57,6 +58,7 @@ class FactionStats:
         # Create a list of snapshots over the last 90 days
 
         py.sign_in('criosx','oey3dlS7gKLJLadOuKsl')
+        published_plots=[]
 
         history=[]
         for entry in self.factionstat:
@@ -100,33 +102,31 @@ class FactionStats:
 
             data.to_csv('./plotdata/' + system + '_history.dat', index=False)
 
-            # Create Plots
-            # Matplotlib
-            fig, ax = plt.subplots(nrows=1, ncols=1)
-            traces=[]
-            for faction in factionlist:
-                ax.plot(data['Date'].tolist(), data[faction].tolist(),'-',label=faction)
-            ax.legend()
-            ax.set_xlabel('Date')
-            ax.set_ylabel('Influence (%)')
-            fig.autofmt_xdate()
-            fig.suptitle(system)
-            fig.savefig('./plots/'+ system + '_history.png')
-            plt.close(fig)
-
-            # Plotly
+            # Create Plots with Plotly
+            traces = []
             for faction in factionlist:
                 trace = go.Scatter(x=data['Date'].tolist(), y=data[faction].tolist(), mode='lines', name=faction)
                 traces.append(trace)
 
             plotformat = go.Layout(title=system, xaxis=dict(title='Date', mirror=True, showline=True),
-                                   yaxis=dict(title='Influence', mirror=True, showline=True))
-
+                                   yaxis=dict(title='Influence (%)', mirror=True, showline=True))
 
             plotlyfig = go.Figure(data=traces, layout=plotformat)
-            py.plot(plotlyfig,filename=system + '_history.png')
 
-            #plotly.offline.plot({'data': traces, 'layout': plotformat})
+            try:
+                url_name = py.plot(plotlyfig,filename=system + '_history.png')
+                published_plots.append(url_name)
+            except:
+                print ('Failed to publish '+system+'_history.png')
+
+            plotly.offline.plot(plotlyfig, filename='./plots/'+ system + '_history.html', auto_open=False)
+            py.image.save_as(plotlyfig, filename='./plots/'+ system + '_history.png')
+
+
+            self.fn_save_object(published_plots,'./plots/published_plots.dat')
+
+        return published_plots
+
 
     def fn_plot_system_snapshots(self):
         # Creates a file that can be used for plotting system snapshots (most recent time)
@@ -165,10 +165,10 @@ class FactionStats:
     def fn_pull_data_from_eddb(self, target_id=14271):
         # Canonn faction ID is 14271
 
-        systems_populated = pd.read_json('https://eddb.io/archive/v5/systems_populated.json')
-        # systems_populated = pd.read_json('~/Desktop/systems_populated.json')
-        factions = pd.read_json('https://eddb.io/archive/v5/factions.json')
-        # factions = pd.read_json('~/Desktop/factions.json')
+        # systems_populated = pd.read_json('https://eddb.io/archive/v5/systems_populated.json')
+        systems_populated = pd.read_json('~/Desktop/systems_populated.json')
+        # factions = pd.read_json('https://eddb.io/archive/v5/factions.json')
+        factions = pd.read_json('~/Desktop/factions.json')
 
         # setup dataframes for extracting systems in which Canonn is present and
         # reduce the faction dataframe to entries only for factions that are in Canonn space
