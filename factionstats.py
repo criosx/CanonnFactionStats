@@ -2,7 +2,6 @@ import os.path
 import pandas as pd
 import pickle
 import time
-import matplotlib.pyplot as plt
 import plotly.plotly as py
 import plotly.graph_objs as go
 import plotly
@@ -106,16 +105,45 @@ class FactionStats:
             data.to_csv('./plotdata/' + system + '_history.dat', index=False)
 
             # Create Plots with Plotly
+            # snapshots
+
+            # Create current snapshots and save the data for future plotting
+
+            snapshot = history[-1].copy()
+            snapshot[system].sort_index()
+            snapshot[system].to_csv('./plotdata/'+system+'_snapshot.dat', index=False)
+
+            # Use matplotlib to create plots
+            # snapshot
+            labels = snapshot[system]['Faction'].tolist()
+            values = snapshot[system]['Influence'].tolist()
+            layout = {'title' : system+' @ '+str(snapshot[system]['Last Time Updated'].tolist()[0]),
+                      'annotations': [{"font": {"size": 20}, "showarrow": False, "text": "Influence"}]}
+
+            pietrace = go.Pie(labels=labels, values=values, hoverinfo="label+percent+name",hole=.4)
+
+            plotlyfig = go.Figure(data=[pietrace], layout=layout)
+
+            py.image.save_as(plotlyfig, filename='./plots/' + system + '_snapshot.png')
+
+            try:
+                url_name = py.plot(plotlyfig,filename=system + '_snapshot.png')
+                published_plots.append(url_name)
+            except:
+                print ('Failed to publish '+system+'_history.png')
+
+            # History
             traces = []
             for faction in factionlist:
                 trace = go.Scatter(x=data['Date'].tolist(), y=data[faction].tolist(), mode='lines+markers'
                                    , name=faction, line=dict(shape='spline'))
                 traces.append(trace)
 
-            plotformat = go.Layout(title=system, xaxis=dict(title='Date', mirror=True, showline=True),
+            layout = go.Layout(title=system, xaxis=dict(title='Date', mirror=True, showline=True),
                                    yaxis=dict(title='Influence (%)', mirror=True, showline=True))
 
-            plotlyfig = go.Figure(data=traces, layout=plotformat)
+            plotlyfig = go.Figure(data=traces, layout=layout)
+            py.image.save_as(plotlyfig, filename='./plots/' + system + '_history.png')
 
             try:
                 url_name = py.plot(plotlyfig,filename=system + '_history.png')
@@ -124,47 +152,11 @@ class FactionStats:
                 print ('Failed to publish '+system+'_history.png')
 
             #plotly.offline.plot(plotlyfig, filename='./plots/'+ system + '_history.html', auto_open=False)
-            py.image.save_as(plotlyfig, filename='./plots/'+ system + '_history.png')
 
 
             self.fn_save_object(published_plots,'./plots/published_plots.dat')
 
         return published_plots
-
-
-    def fn_plot_system_snapshots(self):
-        # Creates a file that can be used for plotting system snapshots (most recent time)
-        # Format:
-        # Faction Influence FactionState LastTimeUpdated
-        # ...     ...       ...           ...
-        # ...     ...       ...           ...
-
-        snapshot = self.fn_get_system_snapshots(self.factionstat[-1][1], self.factionstat[-1][2])
-        for system in snapshot:
-
-            # Create current snapshots and save the data for future plotting
-
-            snapshot[system].sort_index()
-            snapshot[system].to_csv('./plotdata/'+system+'_snapshot.dat', index=False)
-
-            # Use matplotlib to create plots
-
-            labels = snapshot[system]['Faction'].tolist()
-            sizes = snapshot[system]['Influence'].tolist()
-            explode = []
-            for name in labels:
-                if name == 'Canonn':
-                    explode.append(0.1)
-                else:
-                    explode.append(0.0)
-
-            fig1, ax1 = plt.subplots()
-            fig1.suptitle(system+' @ '+str(snapshot[system]['Last Time Updated'].tolist()[0]))
-            ax1.pie(sizes, explode=explode, labels=labels, autopct='%1.1f%%',
-                    shadow=True, startangle=90)
-            ax1.axis('equal')
-
-            fig1.savefig('./plots/'+system+'_snapshot.png')
 
     def fn_pull_data_from_eddb(self, target_id=14271):
         # Canonn faction ID is 14271
@@ -239,5 +231,4 @@ if __name__ == '__main__':
     factionstats = FactionStats()
     #factionstats.fn_pull_data_from_eddb()
     #factionstats.fn_save_data()
-    factionstats.fn_plot_system_snapshots()
     factionstats.fn_plot_system_history()
