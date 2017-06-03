@@ -11,13 +11,14 @@ import requests
 
 
 class FactionStats:
-    def __init__(self):
+    def __init__(self, target_name):
         # load list with stat data from file
         # structure of list is [[time, systems pandas dataframe, factions pandas dataframe]]
 
-        if os.path.isfile('./statdata/factionstat.dat'):
-            self.factionstat = self.fn_load_object('./statdata/factionstat.dat')
+        if os.path.isfile('./statdata/factionstat_'+target_name+'.dat'):
+            self.factionstat = self.fn_load_object('./statdata/factionstat_'+target_name+'.dat')
         else:
+            print ('Did not find stat file for '+target_name)
             self.factionstat = []
 
     def fn_get_system_snapshots(self, systems, factions):
@@ -50,7 +51,7 @@ class FactionStats:
 
         return po
 
-    def fn_plot_system_history(self, webpublishing=False):
+    def fn_plot_system_history(self, target_name, webpublishing=False):
         # Plots the influence history of a given system saves data and plots
         # Format:
         # Time Faction1 Faction2 ...
@@ -62,24 +63,24 @@ class FactionStats:
         py.sign_in('criosix','3jLviaVFikQOH1BZRcew')
         published_plots=[]
 
-        history=[]
+        history = []
         for entry in self.factionstat:
             if (time.time()-time.mktime(time.strptime(entry[0]))) < (90*24*60*60+1):
                 history.append(self.fn_get_system_snapshots(entry[1], entry[2]))
 
         # Get a list of all occupied systems
 
-        systemlist=[]
+        systemlist = []
         for entry in history:
             for system in entry:
                 if system not in systemlist:
                     systemlist.append(system)
 
-        #Create data and plots for all systems
+        # Create data and plots for all systems
         for system in systemlist:
 
             # Get list of all factions
-            factionlist=[]
+            factionlist = []
             for entry in history:
                 for faction in entry[system]['Faction'].tolist():
                     if faction not in factionlist:
@@ -113,31 +114,30 @@ class FactionStats:
             snapshot[system].sort_index()
             snapshot[system].to_csv('./plotdata/'+system+'_snapshot.dat', index=False)
 
-            # Use matplotlib to create plots
+            # Use Plot.ly to create plots
             # Snapshots
             labels = snapshot[system]['Faction'].tolist()
             for i, val in enumerate(labels):
                 if snapshot[system]['Faction State'].tolist()[i] != 'None':
                     labels[i] = val + ' (' + snapshot[system]['Faction State'].tolist()[i] + ')'
             values = snapshot[system]['Influence'].tolist()
-            centertext = str(snapshot[system]['Last Time Updated'].tolist()[0]).split()[0]+'<br>'+\
+            centertext = str(snapshot[system]['Last Time Updated'].tolist()[0]).split()[0]+'<br>' + \
                          str(snapshot[system]['Last Time Updated'].tolist()[0]).split()[1]
             layout = {'annotations': [{"font": {'color': 'rgb(207,217,220)'}, "showarrow": False, "text": centertext}],
-                      'paper_bgcolor': 'rgb(55,71,79)', 'plot_bgcolor': 'rgb(55,71,79)', 'font': {'color': 'rgb(207,217,220)'},
-                      'legend': {'orientation': 'h'}, 'autosize': True, 'height': 700}
+                      'paper_bgcolor': 'rgb(55,71,79)', 'plot_bgcolor': 'rgb(55,71,79)',
+                      'font': {'color': 'rgb(207,217,220)'}, 'legend': {'orientation': 'h'}, 'autosize': True}
 
             pietrace = go.Pie(labels=labels, values=values, hoverinfo="label+percent", hole=.4)
-
             plotlyfig = go.Figure(data=[pietrace], layout=layout)
 
-            #py.image.save_as(plotlyfig, filename='./plots/' + system + '_snapshot.png')
+            # py.image.save_as(plotlyfig, filename='./plots/' + system + '_snapshot.png')
 
             if webpublishing:
                 trycounter = 1
                 while trycounter < 6:
                     try:
-                        print ('Attempting to publish '+system + '_snapshot, attempt #'+str(trycounter))
-                        url_name = py.plot(plotlyfig,filename=system + '_snapshot', auto_open=False)
+                        print ('Publishing '+system + '_snapshot, attempt #'+str(trycounter))
+                        url_name = py.plot(plotlyfig,filename=target_name+'/'+system + '_snapshot', auto_open=False)
                         published_plots.append(url_name)
                         trycounter = 6
                     except:
@@ -159,14 +159,14 @@ class FactionStats:
                       'font': {'color': 'rgb(207,217,220)'}, 'legend': {'orientation': 'h', 'y': 1.02, 'yanchor': 'bottom'}}
 
             plotlyfig = go.Figure(data=traces, layout=layout)
-            #py.image.save_as(plotlyfig, filename='./plots/' + system + '_history.png')
+            # py.image.save_as(plotlyfig, filename='./plots/' + system + '_history.png')
 
             if webpublishing:
                 trycounter = 1
                 while trycounter < 6:
                     try:
-                        print ('Attempting to publish '+system +'_history, attempt #'+str(trycounter))
-                        url_name = py.plot(plotlyfig,filename=system + '_history', auto_open=False)
+                        print ('Publishing '+system +'_history, attempt #'+str(trycounter))
+                        url_name = py.plot(plotlyfig,filename=target_name+'/'+system + '_history', auto_open=False)
                         published_plots.append(url_name)
                         trycounter = 6
                     except:
@@ -175,34 +175,45 @@ class FactionStats:
                         print time.sleep(30)
                         trycounter += 1
 
-            #plotly.offline.plot(plotlyfig, filename='./plots/'+ system + '_history.html', auto_open=False)
+            # plotly.offline.plot(plotlyfig, filename='./plots/'+ system + '_history.html', auto_open=False)
 
-
-        self.fn_save_object(published_plots,'./plots/published_plots.dat')
+        self.fn_save_object(published_plots,'./plots/published_plots'+target_name+'.dat')
 
         return published_plots
 
-    def fn_pull_data_from_eddb(self, target_id=14271):
+    def fn_pull_data_from_eddb(self, target_name):
         # Canonn faction ID is 14271
 
         # method from https://stackoverflow.com/questions/32400867/pandas-read-csv-from-url to deal with SSL sites
         url = 'https://eddb.io/archive/v5/systems_populated.json'
         s = requests.get(url).content
         systems_populated = pd.read_json(io.StringIO(s.decode('utf-8')))
-        #systems_populated = pd.read_json('https://eddb.io/archive/v5/systems_populated.json')
-        #systems_populated = pd.read_json('~/Desktop/systems_populated.json')
+        # systems_populated = pd.read_json('https://eddb.io/archive/v5/systems_populated.json')
+        # systems_populated = pd.read_json('~/Desktop/systems_populated.json')
 
         url = 'https://eddb.io/archive/v5/factions.json'
         s = requests.get(url).content
         factions = pd.read_json(io.StringIO(s.decode('utf-8')))
-        #factions = pd.read_json('https://eddb.io/archive/v5/factions.json')
-        #factions = pd.read_json('~/Desktop/factions.json')
+        # factions = pd.read_json('https://eddb.io/archive/v5/factions.json')
+        # factions = pd.read_json('~/Desktop/factions.json')
 
-        # setup dataframes for extracting systems in which Canonn is present and
-        # reduce the faction dataframe to entries only for factions that are in Canonn space
-
+        # setup dataframes for extracting systems in which the target faction is present and
+        # reduce the faction dataframe to entries only for factions that are in target faction's space
         systems_populated.set_index("name", inplace=True)
         factions.set_index('id', inplace=True)
+
+        # find the target name in the factions data frame and retrieve ID
+        found_id = False
+        for id in factions.index.tolist():
+            if target_name == factions.loc[id, 'name']:
+                target_id = id
+                found_id = True
+                break
+
+        if not found_id:
+            print 'Did not find target faction in EDDB dump'
+            return False
+
         system_names_target = []
         faction_names_target = [target_id]
 
@@ -236,23 +247,32 @@ class FactionStats:
                                           and self.factionstat[-1][2].equals(factions_target)):
             self.factionstat.append([time.asctime(), systems_target, factions_target])
 
+        return True
+
     def fn_save_object(self, obj, filename):
 
         fi = open(filename, "w")
         pickle.dump(obj, fi)
         fi.close()
 
-    def fn_save_data(self):
+    def fn_save_data(self, target_name):
         # save all data before exit
 
-        self.fn_save_object(self.factionstat, './statdata/factionstat.dat')
+        self.fn_save_object(self.factionstat, './statdata/factionstat_'+target_name+'.dat')
 
 
 # main program from command line
 
 if __name__ == '__main__':
 
-    factionstats = FactionStats()
-    #factionstats.fn_pull_data_from_eddb()
-    #factionstats.fn_save_data()
-    factionstats.fn_plot_system_history(webpublishing=True)
+    target_name = 'Canonn'
+    factionstats = FactionStats(target_name)
+    #factionstats.fn_pull_data_from_eddb(target_name)
+    #factionstats.fn_save_data(target_name)
+    factionstats.fn_plot_system_history(target_name, webpublishing=False)
+
+    target_name = 'Canonn Deep Space Research'
+    factionstats = FactionStats(target_name)
+    factionstats.fn_pull_data_from_eddb(target_name)
+    factionstats.fn_save_data(target_name)
+    factionstats.fn_plot_system_history(target_name, webpublishing=False)
