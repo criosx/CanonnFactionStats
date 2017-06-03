@@ -50,7 +50,7 @@ class FactionStats:
 
         return po
 
-    def fn_plot_system_history(self):
+    def fn_plot_system_history(self, webpublishing=False):
         # Plots the influence history of a given system saves data and plots
         # Format:
         # Time Faction1 Faction2 ...
@@ -59,7 +59,7 @@ class FactionStats:
 
         # Create a list of snapshots over the last 90 days
 
-        py.sign_in('criosx','oey3dlS7gKLJLadOuKsl')
+        py.sign_in('criosix','3jLviaVFikQOH1BZRcew')
         published_plots=[]
 
         history=[]
@@ -114,23 +114,37 @@ class FactionStats:
             snapshot[system].to_csv('./plotdata/'+system+'_snapshot.dat', index=False)
 
             # Use matplotlib to create plots
-            # snapshot
+            # Snapshots
             labels = snapshot[system]['Faction'].tolist()
+            for i, val in enumerate(labels):
+                if snapshot[system]['Faction State'].tolist()[i] != 'None':
+                    labels[i] = val + ' (' + snapshot[system]['Faction State'].tolist()[i] + ')'
             values = snapshot[system]['Influence'].tolist()
-            layout = {'title' : system+' @ '+str(snapshot[system]['Last Time Updated'].tolist()[0]),
-                      'annotations': [{"font": {"size": 20}, "showarrow": False, "text": "Influence"}]}
+            centertext = str(snapshot[system]['Last Time Updated'].tolist()[0]).split()[0]+'<br>'+\
+                         str(snapshot[system]['Last Time Updated'].tolist()[0]).split()[1]
+            layout = {'annotations': [{"font": {'color': 'rgb(207,217,220)'}, "showarrow": False, "text": centertext}],
+                      'paper_bgcolor': 'rgb(55,71,79)', 'plot_bgcolor': 'rgb(55,71,79)', 'font': {'color': 'rgb(207,217,220)'},
+                      'legend': {'orientation': 'h'}, 'autosize': True, 'height': 700}
 
-            pietrace = go.Pie(labels=labels, values=values, hoverinfo="label+percent+name",hole=.4)
+            pietrace = go.Pie(labels=labels, values=values, hoverinfo="label+percent", hole=.4)
 
             plotlyfig = go.Figure(data=[pietrace], layout=layout)
 
-            py.image.save_as(plotlyfig, filename='./plots/' + system + '_snapshot.png')
+            #py.image.save_as(plotlyfig, filename='./plots/' + system + '_snapshot.png')
 
-            try:
-                url_name = py.plot(plotlyfig,filename=system + '_snapshot.png')
-                published_plots.append(url_name)
-            except:
-                print ('Failed to publish '+system+'_history.png')
+            if webpublishing:
+                trycounter = 1
+                while trycounter < 6:
+                    try:
+                        print ('Attempting to publish '+system + '_snapshot, attempt #'+str(trycounter))
+                        url_name = py.plot(plotlyfig,filename=system + '_snapshot', auto_open=False)
+                        published_plots.append(url_name)
+                        trycounter = 6
+                    except:
+                        print ('Failed to publish '+system+'_history')
+                        print ('Waiting for 30 s ...')
+                        print time.sleep(30)
+                        trycounter += 1
 
             # History
             traces = []
@@ -139,22 +153,32 @@ class FactionStats:
                                    , name=faction, line=dict(shape='spline'))
                 traces.append(trace)
 
-            layout = go.Layout(title=system, xaxis=dict(title='Date', mirror=True, showline=True),
-                                   yaxis=dict(title='Influence (%)', mirror=True, showline=True))
+            layout = {'xaxis': {'title': 'Date', 'mirror': True, 'showline': True, 'color': 'rgb(207,217,220)'},
+                      'yaxis': {'title': 'Influence (%)', 'mirror': True, 'showline': True, 'color': 'rgb(207,217,220)'},
+                      'paper_bgcolor': 'rgb(55,71,79)', 'plot_bgcolor': 'rgb(55,71,79)',
+                      'font': {'color': 'rgb(207,217,220)'}, 'legend': {'orientation': 'h', 'y': 1.02, 'yanchor': 'bottom'}}
 
             plotlyfig = go.Figure(data=traces, layout=layout)
-            py.image.save_as(plotlyfig, filename='./plots/' + system + '_history.png')
+            #py.image.save_as(plotlyfig, filename='./plots/' + system + '_history.png')
 
-            try:
-                url_name = py.plot(plotlyfig,filename=system + '_history.png')
-                published_plots.append(url_name)
-            except:
-                print ('Failed to publish '+system+'_history.png')
+            if webpublishing:
+                trycounter = 1
+                while trycounter < 6:
+                    try:
+                        print ('Attempting to publish '+system +'_history, attempt #'+str(trycounter))
+                        url_name = py.plot(plotlyfig,filename=system + '_history', auto_open=False)
+                        published_plots.append(url_name)
+                        trycounter = 6
+                    except:
+                        print ('Failed to publish '+system+'_history')
+                        print ('Waiting for 30 s ...')
+                        print time.sleep(30)
+                        trycounter += 1
 
             #plotly.offline.plot(plotlyfig, filename='./plots/'+ system + '_history.html', auto_open=False)
 
 
-            self.fn_save_object(published_plots,'./plots/published_plots.dat')
+        self.fn_save_object(published_plots,'./plots/published_plots.dat')
 
         return published_plots
 
@@ -231,4 +255,4 @@ if __name__ == '__main__':
     factionstats = FactionStats()
     #factionstats.fn_pull_data_from_eddb()
     #factionstats.fn_save_data()
-    factionstats.fn_plot_system_history()
+    factionstats.fn_plot_system_history(webpublishing=True)
