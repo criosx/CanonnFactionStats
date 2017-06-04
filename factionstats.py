@@ -9,7 +9,6 @@ import io
 import requests
 
 
-
 class FactionStats:
     def __init__(self, target_name):
         # load list with stat data from file
@@ -138,7 +137,7 @@ class FactionStats:
                     try:
                         print ('Publishing '+system + '_snapshot, attempt #'+str(trycounter))
                         url_name = py.plot(plotlyfig,filename=target_name+'/'+system + '_snapshot', auto_open=False)
-                        published_plots.append(url_name)
+                        published_plots.append(system + '_snapshot:    ' + url_name + '\n')
                         trycounter = 6
                     except:
                         print ('Failed to publish '+system+'_history')
@@ -167,7 +166,7 @@ class FactionStats:
                     try:
                         print ('Publishing '+system +'_history, attempt #'+str(trycounter))
                         url_name = py.plot(plotlyfig,filename=target_name+'/'+system + '_history', auto_open=False)
-                        published_plots.append(url_name)
+                        published_plots.append(system + '_history:    '+url_name+'\n')
                         trycounter = 6
                     except:
                         print ('Failed to publish '+system+'_history')
@@ -177,7 +176,9 @@ class FactionStats:
 
             # plotly.offline.plot(plotlyfig, filename='./plots/'+ system + '_history.html', auto_open=False)
 
-        self.fn_save_object(published_plots,'./plots/published_plots'+target_name+'.dat')
+        fi = open('./plots/published_plots'+target_name+'.dat', 'w')
+        fi.writelines(published_plots)
+        fi.close()
 
         return published_plots
 
@@ -267,12 +268,12 @@ if __name__ == '__main__':
 
     target_name = 'Canonn'
     factionstats = FactionStats(target_name)
-    #factionstats.fn_pull_data_from_eddb(target_name)
-    #factionstats.fn_save_data(target_name)
-    factionstats.fn_plot_system_history(target_name, webpublishing=False)
+    factionstats.fn_pull_data_from_eddb(target_name)
+    factionstats.fn_save_data(target_name)
+    factionstats.fn_plot_system_history(target_name, webpublishing=True)
 
     target_name = 'Canonn Deep Space Research'
     factionstats = FactionStats(target_name)
     factionstats.fn_pull_data_from_eddb(target_name)
     factionstats.fn_save_data(target_name)
-    factionstats.fn_plot_system_history(target_name, webpublishing=False)
+    factionstats.fn_plot_system_history(target_name, webpublishing=True)
