@@ -60,7 +60,7 @@ class FactionStats:
         # Create a list of snapshots over the last 90 days
 
         py.sign_in('criosix','3jLviaVFikQOH1BZRcew')
-        published_plots=[]
+        published_plots = []
 
         history = []
         for entry in self.factionstat:
@@ -129,7 +129,7 @@ class FactionStats:
             pietrace = go.Pie(labels=labels, values=values, hoverinfo="label+percent", hole=.4)
             plotlyfig = go.Figure(data=[pietrace], layout=layout)
 
-            py.image.save_as(plotlyfig, filename='./plots/' + system + '_snapshot.png')
+            # py.image.save_as(plotlyfig, filename='./plots/' + system + '_snapshot.png')
 
             if webpublishing:
                 trycounter = 1
@@ -182,23 +182,10 @@ class FactionStats:
 
         return published_plots
 
-    def fn_pull_data_from_eddb(self, target_name):
+    def fn_pull_data_from_json(self, target_name):
 
-        def fn_download_from_ssl(url):
-            try:
-                # method from https://stackoverflow.com/questions/32400867/pandas-read-csv-from-url
-                # to deal with SSL sites, mostly for MacOS
-                s = requests.get(url).content
-                frame = pd.read_json(io.StringIO(s.decode('utf-8')))
-            except SSLError:
-                # standard method
-                frame = pd.read_json('https://eddb.io/archive/v5/systems_populated.json')
-            return frame
-
-        systems_populated = fn_download_from_ssl('https://eddb.io/archive/v5/systems_populated.json')
-        # systems_populated = pd.read_json('~/Desktop/systems_populated.json')
-        factions = fn_download_from_ssl('https://eddb.io/archive/v5/factions.json')
-        # factions = pd.read_json('~/Desktop/factions.json')
+        systems_populated = pd.read_json('./jsondata/systems_populated.json')
+        factions = pd.read_json('./jsondata/factions.json')
 
         # setup dataframes for extracting systems in which the target faction is present and
         # reduce the faction dataframe to entries only for factions that are in target faction's space
@@ -264,18 +251,39 @@ class FactionStats:
         self.fn_save_object(self.factionstat, './statdata/factionstat_'+target_name+'.dat')
 
 
+def fn_update_from_eddb():
+    def fn_download_from_ssl(url):
+        try:
+            # method from https://stackoverflow.com/questions/32400867/pandas-read-csv-from-url
+            # to deal with SSL sites, mostly for MacOS
+            s = requests.get(url).content
+            frame = pd.read_json(io.StringIO(s.decode('utf-8')))
+        except SSLError:
+            # standard method
+            frame = pd.read_json('https://eddb.io/archive/v5/systems_populated.json')
+        return frame
+
+    systems_populated = fn_download_from_ssl('https://eddb.io/archive/v5/systems_populated.json')
+    systems_populated.to_json('./jsondata/systems_populated.json')
+    factions = fn_download_from_ssl('https://eddb.io/archive/v5/factions.json')
+    factions.to_json('./jsondata/factions.json')
+
+
+
 # main program from command line
 
 if __name__ == '__main__':
 
+    fn_update_from_eddb()
+
     target_name = 'Canonn'
     factionstats = FactionStats(target_name)
-    factionstats.fn_pull_data_from_eddb(target_name)
+    factionstats.fn_pull_data_from_json(target_name)
     factionstats.fn_save_data(target_name)
-    factionstats.fn_plot_system_history(target_name, webpublishing=False)
+    factionstats.fn_plot_system_history(target_name, webpublishing=True)
 
     target_name = 'Canonn Deep Space Research'
     factionstats = FactionStats(target_name)
-    factionstats.fn_pull_data_from_eddb(target_name)
+    factionstats.fn_pull_data_from_json(target_name)
     factionstats.fn_save_data(target_name)
-    factionstats.fn_plot_system_history(target_name, webpublishing=False)
+    factionstats.fn_plot_system_history(target_name, webpublishing=True)
