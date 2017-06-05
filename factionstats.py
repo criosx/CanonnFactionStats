@@ -68,7 +68,6 @@ class FactionStats:
                 history.append(self.fn_get_system_snapshots(entry[1], entry[2]))
 
         # Get a list of all occupied systems
-
         systemlist = []
         for entry in history:
             for system in entry:
@@ -77,7 +76,6 @@ class FactionStats:
 
         # Create data and plots for all systems
         for system in systemlist:
-
             # Get list of all factions
             factionlist = []
             for entry in history:
@@ -89,25 +87,33 @@ class FactionStats:
             factionlist.sort()
             headerline = ['Date']+factionlist
             data = pd.DataFrame(columns=headerline)
+            markers = pd.DataFrame(columns=headerline)
 
             for entry in history:
-                nextline = []
+                nextline_influence = []
+                nextline_markers = []
                 for faction in factionlist:
                     if faction in entry[system]['Faction'].tolist():
                         i = entry[system]['Faction'].tolist().index(faction)
-                        nextline.append(entry[system]['Influence'].tolist()[i])
+                        nextline_influence.append(entry[system]['Influence'].tolist()[i])
+                        nextline_markers.append(entry[system]['Faction State'].tolist()[i])
                         date = entry[system]['Last Time Updated'].tolist()[0]
                     else:
-                        nextline.append(0.0)
+                        nextline_influence.append(0.0)
+                        nextline_markers.append('')
 
-                data.loc[data.shape[0]] = [date]+nextline
+                for i, element in enumerate(nextline_markers):
+                    if element == 'None':
+                        nextline_markers[i] = ''
+
+                data.loc[data.shape[0]] = [date]+nextline_influence
+                markers.loc[markers.shape[0]] = [date]+nextline_markers
 
             data.to_csv('./plotdata/' + system + '_history.dat', index=False)
+            markers.to_csv('./plotdata/' + system + '_markers.dat', index=False)
 
             # Create Plots with Plotly
-            # snapshots
-
-            # Create current snapshots and save the data for future plotting
+            # Create current snapshots
 
             snapshot = history[-1].copy()
             snapshot[system].sort_index()
@@ -116,17 +122,38 @@ class FactionStats:
             # Use Plot.ly to create plots
             # Snapshots
             labels = snapshot[system]['Faction'].tolist()
+            pull = []
+            color = []
             for i, val in enumerate(labels):
                 if snapshot[system]['Faction State'].tolist()[i] != 'None':
                     labels[i] = val + ' (' + snapshot[system]['Faction State'].tolist()[i] + ')'
+                if val == target_name:
+                    pull.append(0.05)
+                    color.append('cornflowerblue')
+                else:
+                    pull.append(0.0)
+                    color.append('')
             values = snapshot[system]['Influence'].tolist()
+            values_round = [round(elem, 1) for elem in values]
             centertext = str(snapshot[system]['Last Time Updated'].tolist()[0]).split()[0]+'<br>' + \
                          str(snapshot[system]['Last Time Updated'].tolist()[0]).split()[1]
-            layout = {'annotations': [{"font": {'color': 'rgb(207,217,220)'}, "showarrow": False, "text": centertext}],
+
+            # if snapshot is too old, change color of center text of pie chart
+            # centertextcolor = 'rgb(207,217,220)'
+            centertextcolor = 'lightgreen'
+            if (time.time() - time.mktime(time.strptime(str(snapshot[system]['Last Time Updated'].tolist()[0]),
+                                                       '%Y-%m-%d %H:%M:%S'))) > (1 * 24 * 60 * 60 + 1):
+                centertextcolor = 'yellow'
+            if (time.time() - time.mktime(time.strptime(str(snapshot[system]['Last Time Updated'].tolist()[0]),
+                                                       '%Y-%m-%d %H:%M:%S'))) > (2 * 24 * 60 * 60 + 1):
+                centertextcolor = 'red'
+
+            layout = {'annotations': [{"font": {'color': centertextcolor}, "showarrow": False, "text": centertext}],
                       'paper_bgcolor': 'rgb(55,71,79)', 'plot_bgcolor': 'rgb(55,71,79)',
                       'font': {'color': 'rgb(207,217,220)'}, 'legend': {'orientation': 'h'}, 'autosize': True}
 
-            pietrace = go.Pie(labels=labels, values=values, hoverinfo="label+percent", hole=.4)
+            pietrace = go.Pie(labels=labels, values=values_round, hoverinfo="label+percent", hole=.4, pull=pull,
+                              marker=dict(colors=color))
             plotlyfig = go.Figure(data=[pietrace], layout=layout)
 
             # py.image.save_as(plotlyfig, filename='./plots/' + system + '_snapshot.png')
@@ -148,8 +175,20 @@ class FactionStats:
             # History
             traces = []
             for faction in factionlist:
-                trace = go.Scatter(x=data['Date'].tolist(), y=data[faction].tolist(), mode='lines+markers'
-                                   , name=faction, line=dict(shape='spline'))
+                ydata = data[faction].tolist()
+                ydata_round = [round(elem, 1) for elem in ydata]
+                if faction == target_name:
+                    width = 3
+                    color = 'cornflowerblue'
+                    trace = go.Scatter(x=data['Date'].tolist(), y=ydata_round, mode='lines+markers'
+                                       , name=faction, line=dict(shape='spline', width=width, color=color),
+                                       text=markers[faction].tolist())
+                else:
+                    width = 2
+                    trace = go.Scatter(x=data['Date'].tolist(), y=ydata_round, mode='lines+markers',
+                                       name=faction, line=dict(shape='spline', width=width),
+                                       text=markers[faction].tolist())
+
                 traces.append(trace)
 
             layout = {'xaxis': {'title': 'Date', 'mirror': True, 'showline': True, 'color': 'rgb(207,217,220)'},
@@ -158,7 +197,7 @@ class FactionStats:
                       'font': {'color': 'rgb(207,217,220)'}, 'legend': {'orientation': 'h', 'y': 1.02, 'yanchor': 'bottom'}}
 
             plotlyfig = go.Figure(data=traces, layout=layout)
-            # py.image.save_as(plotlyfig, filename='./plots/' + system + '_history.png')
+            py.image.save_as(plotlyfig, filename='./plots/' + system + '_history.png')
 
             if webpublishing:
                 trycounter = 1
@@ -258,7 +297,7 @@ def fn_update_from_eddb():
             # to deal with SSL sites, mostly for MacOS
             s = requests.get(url).content
             frame = pd.read_json(io.StringIO(s.decode('utf-8')))
-        except SSLError:
+        except 'SSLError':
             # standard method
             frame = pd.read_json('https://eddb.io/archive/v5/systems_populated.json')
         return frame
@@ -274,16 +313,18 @@ def fn_update_from_eddb():
 
 if __name__ == '__main__':
 
-    fn_update_from_eddb()
+    #fn_update_from_eddb()
+
+    webpublishing = False
 
     target_name = 'Canonn'
     factionstats = FactionStats(target_name)
     factionstats.fn_pull_data_from_json(target_name)
     factionstats.fn_save_data(target_name)
-    factionstats.fn_plot_system_history(target_name, webpublishing=True)
+    factionstats.fn_plot_system_history(target_name, webpublishing=webpublishing)
 
     target_name = 'Canonn Deep Space Research'
     factionstats = FactionStats(target_name)
     factionstats.fn_pull_data_from_json(target_name)
     factionstats.fn_save_data(target_name)
-    factionstats.fn_plot_system_history(target_name, webpublishing=True)
+    factionstats.fn_plot_system_history(target_name, webpublishing=webpublishing)
