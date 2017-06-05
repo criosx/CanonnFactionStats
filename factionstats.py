@@ -129,7 +129,7 @@ class FactionStats:
             pietrace = go.Pie(labels=labels, values=values, hoverinfo="label+percent", hole=.4)
             plotlyfig = go.Figure(data=[pietrace], layout=layout)
 
-            # py.image.save_as(plotlyfig, filename='./plots/' + system + '_snapshot.png')
+            py.image.save_as(plotlyfig, filename='./plots/' + system + '_snapshot.png')
 
             if webpublishing:
                 trycounter = 1
@@ -183,19 +183,21 @@ class FactionStats:
         return published_plots
 
     def fn_pull_data_from_eddb(self, target_name):
-        # Canonn faction ID is 14271
 
-        # method from https://stackoverflow.com/questions/32400867/pandas-read-csv-from-url to deal with SSL sites
-        url = 'https://eddb.io/archive/v5/systems_populated.json'
-        s = requests.get(url).content
-        systems_populated = pd.read_json(io.StringIO(s.decode('utf-8')))
-        # systems_populated = pd.read_json('https://eddb.io/archive/v5/systems_populated.json')
+        def fn_download_from_ssl(url):
+            try:
+                # method from https://stackoverflow.com/questions/32400867/pandas-read-csv-from-url
+                # to deal with SSL sites, mostly for MacOS
+                s = requests.get(url).content
+                frame = pd.read_json(io.StringIO(s.decode('utf-8')))
+            except SSLError:
+                # standard method
+                frame = pd.read_json('https://eddb.io/archive/v5/systems_populated.json')
+            return frame
+
+        systems_populated = fn_download_from_ssl('https://eddb.io/archive/v5/systems_populated.json')
         # systems_populated = pd.read_json('~/Desktop/systems_populated.json')
-
-        url = 'https://eddb.io/archive/v5/factions.json'
-        s = requests.get(url).content
-        factions = pd.read_json(io.StringIO(s.decode('utf-8')))
-        # factions = pd.read_json('https://eddb.io/archive/v5/factions.json')
+        factions = fn_download_from_ssl('https://eddb.io/archive/v5/factions.json')
         # factions = pd.read_json('~/Desktop/factions.json')
 
         # setup dataframes for extracting systems in which the target faction is present and
@@ -270,10 +272,10 @@ if __name__ == '__main__':
     factionstats = FactionStats(target_name)
     factionstats.fn_pull_data_from_eddb(target_name)
     factionstats.fn_save_data(target_name)
-    factionstats.fn_plot_system_history(target_name, webpublishing=True)
+    factionstats.fn_plot_system_history(target_name, webpublishing=False)
 
     target_name = 'Canonn Deep Space Research'
     factionstats = FactionStats(target_name)
     factionstats.fn_pull_data_from_eddb(target_name)
     factionstats.fn_save_data(target_name)
-    factionstats.fn_plot_system_history(target_name, webpublishing=True)
+    factionstats.fn_plot_system_history(target_name, webpublishing=False)
