@@ -89,6 +89,7 @@ class FactionStats:
             data = pd.DataFrame(columns=headerline)
             markers = pd.DataFrame(columns=headerline)
 
+            last_date = ''
             for entry in history:
                 nextline_influence = []
                 nextline_markers = []
@@ -102,12 +103,13 @@ class FactionStats:
                         nextline_influence.append(0.0)
                         nextline_markers.append('')
 
-                for i, element in enumerate(nextline_markers):
-                    if element == 'None':
-                        nextline_markers[i] = ''
+                if date != last_date:
+                    for i, element in enumerate(nextline_markers):
+                        if element == 'None':
+                            nextline_markers[i] = ''
 
-                data.loc[data.shape[0]] = [date]+nextline_influence
-                markers.loc[markers.shape[0]] = [date]+nextline_markers
+                    data.loc[data.shape[0]] = [date]+nextline_influence
+                    markers.loc[markers.shape[0]] = [date]+nextline_markers
 
             data.to_csv('./plotdata/' + system + '_history.dat', index=False)
             markers.to_csv('./plotdata/' + system + '_markers.dat', index=False)
@@ -175,19 +177,48 @@ class FactionStats:
             # History
             traces = []
             for faction in factionlist:
+
                 ydata = data[faction].tolist()
                 ydata_round = [round(elem, 1) for elem in ydata]
+
+                text_markers = markers[faction].tolist()
+                current_state=''
+                for i, marker in enumerate(text_markers):
+                    if current_state == '' and marker != '':
+                        current_state = marker
+                        text_markers[i] = marker + ' start'
+                    elif current_state == '' and marker == '':
+                        pass
+                    elif current_state == marker and len(text_markers)>(i+1):
+                        if text_markers[i+1] != current_state:
+                            text_markers[i] = current_state + ' end'
+                            current_state = ''
+                        else:
+                            text_markers[i] = ''
+
+                # visually mark beginning and end of faction states
+                # TODO: changing the symbol does not work, maybe by design -> check out
+                size = []
+                symbol = []
+                for element in text_markers:
+                    if element == '':
+                        size.append(5)
+                        symbol.append(0)
+                    else:
+                        size.append(8)
+                        symbol.append(17)
+
                 if faction == target_name:
                     width = 3
                     color = 'cornflowerblue'
                     trace = go.Scatter(x=data['Date'].tolist(), y=ydata_round, mode='lines+markers'
                                        , name=faction, line=dict(shape='spline', width=width, color=color),
-                                       text=markers[faction].tolist())
+                                       text=text_markers, marker=dict(size=size))
                 else:
                     width = 2
                     trace = go.Scatter(x=data['Date'].tolist(), y=ydata_round, mode='lines+markers',
                                        name=faction, line=dict(shape='spline', width=width),
-                                       text=markers[faction].tolist())
+                                       text=text_markers, marker=dict(size=size))
 
                 traces.append(trace)
 
@@ -197,7 +228,7 @@ class FactionStats:
                       'font': {'color': 'rgb(207,217,220)'}, 'legend': {'orientation': 'h', 'y': 1.02, 'yanchor': 'bottom'}}
 
             plotlyfig = go.Figure(data=traces, layout=layout)
-            py.image.save_as(plotlyfig, filename='./plots/' + system + '_history.png')
+            # py.image.save_as(plotlyfig, filename='./plots/' + system + '_history.png')
 
             if webpublishing:
                 trycounter = 1
@@ -315,7 +346,7 @@ if __name__ == '__main__':
 
     #fn_update_from_eddb()
 
-    webpublishing = False
+    webpublishing = True
 
     target_name = 'Canonn'
     factionstats = FactionStats(target_name)
