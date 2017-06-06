@@ -202,7 +202,7 @@ class FactionStats:
                 symbol = []
                 for element in text_markers:
                     if element == '':
-                        size.append(5)
+                        size.append(4)
                         symbol.append(0)
                     else:
                         size.append(8)
