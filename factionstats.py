@@ -180,9 +180,6 @@ class FactionStats:
             traces = []
             for faction in factionlist:
 
-                if system == 'Canonnia':
-                    pass
-
                 ydata = data[faction].tolist()
                 ydata_round = [round(elem, 1) for elem in ydata]
 
@@ -192,12 +189,18 @@ class FactionStats:
                     if current_state == '' and marker != '':
                         current_state = marker
                         text_markers[i] = marker + ' start'
+                        if len(text_markers) > (i+1) and text_markers[i+1] != current_state:
+                            current_state = ''
+                            text_markers[i] = text_markers[i] + ' + end'
                     elif current_state == '' and marker == '':
                         pass
                     elif current_state != marker:
                         # sudden change in state without state ended
                         current_state = marker
                         text_markers[i] = marker + ' start'
+                        if len(text_markers) > (i+1) and text_markers[i+1] != current_state:
+                            current_state = ''
+                            text_markers[i] = text_markers[i] + ' + end'
                     elif current_state == marker and len(text_markers) > (i+1):
                         if text_markers[i+1] != current_state:
                             text_markers[i] = current_state + ' end'
