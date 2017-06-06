@@ -108,6 +108,8 @@ class FactionStats:
                         if element == 'None':
                             nextline_markers[i] = ''
 
+                    last_date = date
+
                     data.loc[data.shape[0]] = [date]+nextline_influence
                     markers.loc[markers.shape[0]] = [date]+nextline_markers
 
@@ -178,18 +180,25 @@ class FactionStats:
             traces = []
             for faction in factionlist:
 
+                if system == 'Canonnia':
+                    pass
+
                 ydata = data[faction].tolist()
                 ydata_round = [round(elem, 1) for elem in ydata]
 
                 text_markers = markers[faction].tolist()
-                current_state=''
+                current_state = ''
                 for i, marker in enumerate(text_markers):
                     if current_state == '' and marker != '':
                         current_state = marker
                         text_markers[i] = marker + ' start'
                     elif current_state == '' and marker == '':
                         pass
-                    elif current_state == marker and len(text_markers)>(i+1):
+                    elif current_state != marker:
+                        # sudden change in state without state ended
+                        current_state = marker
+                        text_markers[i] = marker + ' start'
+                    elif current_state == marker and len(text_markers) > (i+1):
                         if text_markers[i+1] != current_state:
                             text_markers[i] = current_state + ' end'
                             current_state = ''
@@ -199,26 +208,23 @@ class FactionStats:
                 # visually mark beginning and end of faction states
                 # TODO: changing the symbol does not work, maybe by design -> check out
                 size = []
-                symbol = []
                 for element in text_markers:
-                    if element == '':
-                        size.append(4)
-                        symbol.append(0)
+                    if (' start' not in element) and (' end' not in element):
+                        size.append(5)
                     else:
-                        size.append(8)
-                        symbol.append(17)
+                        size.append(9)
 
                 if faction == target_name:
                     width = 3
                     color = 'cornflowerblue'
                     trace = go.Scatter(x=data['Date'].tolist(), y=ydata_round, mode='lines+markers'
                                        , name=faction, line=dict(shape='spline', width=width, color=color),
-                                       text=text_markers, marker=dict(size=size))
+                                       text=text_markers, marker=dict(size=size, line=dict(width=0), symbol='circle'))
                 else:
                     width = 2
                     trace = go.Scatter(x=data['Date'].tolist(), y=ydata_round, mode='lines+markers',
                                        name=faction, line=dict(shape='spline', width=width),
-                                       text=text_markers, marker=dict(size=size))
+                                       text=text_markers, marker=dict(size=size, line=dict(width=0), symbol='circle'))
 
                 traces.append(trace)
 
