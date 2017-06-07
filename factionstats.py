@@ -76,12 +76,14 @@ class FactionStats:
 
         # Create data and plots for all systems
         for system in systemlist:
+
             # Get list of all factions
             factionlist = []
             for entry in history:
-                for faction in entry[system]['Faction'].tolist():
-                    if faction not in factionlist:
-                        factionlist.append(faction)
+                if system in entry.keys():
+                    for faction in entry[system]['Faction'].tolist():
+                        if faction not in factionlist:
+                            factionlist.append(faction)
 
             # Create Data
             factionlist.sort()
@@ -91,27 +93,28 @@ class FactionStats:
 
             last_date = ''
             for entry in history:
-                nextline_influence = []
-                nextline_markers = []
-                for faction in factionlist:
-                    if faction in entry[system]['Faction'].tolist():
-                        i = entry[system]['Faction'].tolist().index(faction)
-                        nextline_influence.append(entry[system]['Influence'].tolist()[i])
-                        nextline_markers.append(entry[system]['Faction State'].tolist()[i])
-                        date = entry[system]['Last Time Updated'].tolist()[0]
-                    else:
-                        nextline_influence.append(0.0)
-                        nextline_markers.append('')
+                if system in entry.keys():
+                    nextline_influence = []
+                    nextline_markers = []
+                    for faction in factionlist:
+                        if faction in entry[system]['Faction'].tolist():
+                            i = entry[system]['Faction'].tolist().index(faction)
+                            nextline_influence.append(entry[system]['Influence'].tolist()[i])
+                            nextline_markers.append(entry[system]['Faction State'].tolist()[i])
+                            date = entry[system]['Last Time Updated'].tolist()[0]
+                        else:
+                            nextline_influence.append(0.0)
+                            nextline_markers.append('')
 
-                if date != last_date:
-                    for i, element in enumerate(nextline_markers):
-                        if element == 'None':
-                            nextline_markers[i] = ''
+                    if date != last_date:
+                        for i, element in enumerate(nextline_markers):
+                            if element == 'None':
+                                nextline_markers[i] = ''
 
-                    last_date = date
+                        last_date = date
 
-                    data.loc[data.shape[0]] = [date]+nextline_influence
-                    markers.loc[markers.shape[0]] = [date]+nextline_markers
+                        data.loc[data.shape[0]] = [date]+nextline_influence
+                        markers.loc[markers.shape[0]] = [date]+nextline_markers
 
             data.to_csv('./plotdata/' + system + '_history.dat', index=False)
             markers.to_csv('./plotdata/' + system + '_markers.dat', index=False)
@@ -123,8 +126,6 @@ class FactionStats:
             snapshot[system].sort_index()
             snapshot[system].to_csv('./plotdata/'+system+'_snapshot.dat', index=False)
 
-            # Use Plot.ly to create plots
-            # Snapshots
             labels = snapshot[system]['Faction'].tolist()
             pull = []
             color = []
@@ -183,7 +184,16 @@ class FactionStats:
                 ydata = data[faction].tolist()
                 ydata_round = [round(elem, 1) for elem in ydata]
 
+                # faction state marker data can contain missing elements
+                # check for those and substitute '' for faction state
                 text_markers = markers[faction].tolist()
+                for i, element in enumerate(text_markers):
+                    if pd.isnull(element):
+                        text_markers[i]=''
+
+                # go through the faction state markers for the plot and mark only the start
+                # and end of a state
+
                 current_state = ''
                 for i, marker in enumerate(text_markers):
                     if current_state == '' and marker != '':
@@ -208,8 +218,7 @@ class FactionStats:
                         else:
                             text_markers[i] = ''
 
-                # visually mark beginning and end of faction states
-                # TODO: changing the symbol does not work, maybe by design -> check out
+                # visually mark beginning and end of faction states using different symbol sizes
                 size = []
                 for element in text_markers:
                     if (' start' not in element) and (' end' not in element):
@@ -353,7 +362,7 @@ def fn_update_from_eddb():
 
 if __name__ == '__main__':
 
-    #fn_update_from_eddb()
+    fn_update_from_eddb()
 
     webpublishing = True
 
