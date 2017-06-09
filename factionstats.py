@@ -346,7 +346,7 @@ def fn_update_from_eddb():
             # to deal with SSL sites, mostly for MacOS
             s = requests.get(url).content
             frame = pd.read_json(io.StringIO(s.decode('utf-8')))
-        except 'SSLError':
+        except:
             # standard method
             frame = pd.read_json('https://eddb.io/archive/v5/systems_populated.json')
         return frame
