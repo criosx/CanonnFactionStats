@@ -1,3 +1,4 @@
+import csv
 import os.path
 import pandas as pd
 import pickle
@@ -15,7 +16,8 @@ class FactionStats:
         # structure of list is [[time, systems pandas dataframe, factions pandas dataframe]]
 
         if os.path.isfile('./statdata/factionstat_'+target_name+'.dat'):
-            self.factionstat = self.fn_load_object('./statdata/factionstat_'+target_name+'.dat')
+            # self.factionstat = self.fn_load_object('./statdata/factionstat_'+target_name+'.dat')
+            self.factionstat = self.fn_load_factionstat(target_name)
         else:
             print ('Did not find stat file for '+target_name)
             self.factionstat = []
@@ -328,15 +330,39 @@ class FactionStats:
         return True
 
     def fn_save_object(self, obj, filename):
-
         fi = open(filename, "w")
         pickle.dump(obj, fi)
         fi.close()
 
+    def fn_save_factionstat(self, target_name):
+        with open('./statdata/factionstat_'+target_name+'.csv', 'w') as handle:
+            writer = csv.writer(handle, lineterminator='\n')
+            for entry in self.factionstat:
+                writer.writerow([entry[0]])
+                entry[1].to_json('./statdata/systems_'+target_name+'_'+entry[0]+'.json')
+                entry[2].to_json('./statdata/factions_'+target_name+'_'+entry[0]+'.json')
+
     def fn_save_data(self, target_name):
         # save all data before exit
+        pass
 
-        self.fn_save_object(self.factionstat, './statdata/factionstat_'+target_name+'.dat')
+        # self.fn_save_object(self.factionstat, './statdata/factionstat_'+target_name+'.dat')
+        self.fn_save_factionstat(target_name)
+
+    def fn_load_factionstat(self, target_name):
+        result = []
+        with open('./statdata/factionstat_' + target_name + '.csv', 'rb') as handle:
+            reader = csv.reader(handle)
+            for row in reader:
+                date = row[0]
+                systems = pd.read_json('./statdata/systems_'+target_name+'_'+date+'.json')
+                factions = pd.read_json('./statdata/factions_'+target_name+'_'+date+'.json')
+                #systems.set_index("name", inplace=True)
+                #factions.set_index('id', inplace=True)
+
+                result.append([date, systems, factions])
+        return result
+
 
 
 def fn_update_from_eddb():
