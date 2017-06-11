@@ -140,8 +140,15 @@ class FactionStats:
                 else:
                     pull.append(0.0)
                     color.append('')
+            if system == 'Mobia':
+                pass
             values = snapshot[system]['Influence'].tolist()
-            values_round = [round(elem, 1) for elem in values]
+            values_round = []
+            for i,element in enumerate(values):
+                if isinstance(element, (int, long, float, complex)):
+                    values_round.append(round(element, 1))
+                else:
+                    values_round.append(0.0)
             centertext = str(snapshot[system]['Last Time Updated'].tolist()[0]).split()[0]+'<br>' + \
                          str(snapshot[system]['Last Time Updated'].tolist()[0]).split()[1]
 
