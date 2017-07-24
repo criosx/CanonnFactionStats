@@ -75,8 +75,10 @@ class FactionStats:
             for system in entry:
                 if system not in systemlist:
                     systemlist.append(system)
+        systemlist.sort()
 
         # Create data and plots for all systems
+        target_faction_overview_traces=[]
         for system in systemlist:
 
             # Get list of all factions
@@ -96,6 +98,10 @@ class FactionStats:
             last_date = ''
             for entry in history:
                 if system in entry.keys():
+
+                    # keep last history entry with target faction present as snapshot
+                    snapshot = entry
+
                     nextline_influence = []
                     nextline_markers = []
                     for faction in factionlist:
@@ -122,9 +128,8 @@ class FactionStats:
             markers.to_csv('./plotdata/' + system + '_markers.dat', index=False)
 
             # Create Plots with Plotly
-            # Create current snapshots
+            # Create current snapshot plot using last snapshot with target faction present as found above
 
-            snapshot = history[-1].copy()
             snapshot[system].sort_index()
             snapshot[system].to_csv('./plotdata/'+system+'_snapshot.dat', index=False)
 
@@ -191,7 +196,12 @@ class FactionStats:
             for faction in factionlist:
 
                 ydata = data[faction].tolist()
-                ydata_round = [round(elem, 1) for elem in ydata]
+                ydata_round = []
+                for i, element in enumerate(ydata):
+                    if isinstance(element, (int, long, float, complex)):
+                        ydata_round.append(round(element, 1))
+                    else:
+                        ydata_round.append(0.0)
 
                 # faction state marker data can contain missing elements
                 # check for those and substitute '' for faction state
@@ -241,6 +251,10 @@ class FactionStats:
                     trace = go.Scatter(x=data['Date'].tolist(), y=ydata_round, mode='lines+markers'
                                        , name=faction, line=dict(shape='spline', width=width, color=color),
                                        text=text_markers, marker=dict(size=size, line=dict(width=0), symbol='circle'))
+                    target_faction_overview_traces.append(go.Scatter(x=data['Date'].tolist(), y=ydata_round,
+                                                                     mode='lines+markers', name=system,
+                                                                     line=dict(shape='spline', width=2),
+                                       text=text_markers, marker=dict(size=size, line=dict(width=0), symbol='circle')))
                 else:
                     width = 2
                     trace = go.Scatter(x=data['Date'].tolist(), y=ydata_round, mode='lines+markers',
@@ -249,10 +263,16 @@ class FactionStats:
 
                 traces.append(trace)
 
-            layout = {'xaxis': {'title': 'Date', 'mirror': True, 'showline': True, 'color': 'rgb(207,217,220)'},
+            layout = {'xaxis': {'title': 'Date', 'mirror': True, 'showline': True, 'color': 'rgb(207,217,220)',
+                                'rangeselector': {'font': {'color': 'rgb(0,0,0)'}, 'x': 1.00, 'xanchor': 'right',
+                                                  'buttons': [{'count': 14, 'label': '14d', 'step': 'day',
+                                                               'stepmode': 'backward'},
+                                                              {'count': 1, 'label': '1m', 'step': 'month',
+                                                               'stepmode': 'backward'},
+                                                              {'step': 'all'}]}},
                       'yaxis': {'title': 'Influence (%)', 'mirror': True, 'showline': True, 'color': 'rgb(207,217,220)'},
                       'paper_bgcolor': 'rgb(55,71,79)', 'plot_bgcolor': 'rgb(55,71,79)',
-                      'font': {'color': 'rgb(207,217,220)'}, 'legend': {'orientation': 'h', 'y': 1.02, 'yanchor': 'bottom'}}
+                      'font': {'color': 'rgb(207,217,220)'}, 'legend': {'orientation': 'h', 'y': 1.05, 'yanchor': 'bottom'}}
 
             plotlyfig = go.Figure(data=traces, layout=layout)
             # py.image.save_as(plotlyfig, filename='./plots/' + system + '_history.png')
@@ -272,6 +292,35 @@ class FactionStats:
                         trycounter += 1
 
             # plotly.offline.plot(plotlyfig, filename='./plots/'+ system + '_history.html', auto_open=False)
+
+        layout = {'xaxis': {'title': 'Date', 'mirror': True, 'showline': True, 'color': 'rgb(207,217,220)',
+                            'rangeselector': {'font': {'color': 'rgb(0,0,0)'}, 'x': 1.00, 'xanchor': 'right',
+                                              'buttons': [{'count': 14, 'label': '14d', 'step': 'day',
+                                                           'stepmode': 'backward'},
+                                                          {'count': 1, 'label': '1m', 'step': 'month',
+                                                           'stepmode': 'backward'},
+                                                          {'step': 'all'}]}},
+                  'yaxis': {'title': 'Influence (%)', 'mirror': True, 'showline': True, 'color': 'rgb(207,217,220)'},
+                  'paper_bgcolor': 'rgb(55,71,79)', 'plot_bgcolor': 'rgb(55,71,79)',
+                  'font': {'color': 'rgb(207,217,220)'}, 'legend': {'orientation': 'h', 'y': 1.05, 'yanchor': 'bottom'}}
+
+        plotlyfig = go.Figure(data=target_faction_overview_traces, layout=layout)
+
+        if webpublishing:
+            trycounter = 1
+            while trycounter < 6:
+                try:
+                    print ('Publishing ' + target_name + '_influence_overview, attempt #' + str(trycounter))
+                    url_name = py.plot(plotlyfig, filename=target_name + '/influence_overview', auto_open=False)
+                    published_plots.append(target_name + '_influence_overview:    ' + url_name + '\n')
+                    trycounter = 6
+                except:
+                    print ('Failed to publish ' + target_name + '_influence_overview')
+                    print ('Waiting for 30 s ...')
+                    print time.sleep(30)
+                    trycounter += 1
+
+        # plotly.offline.plot(plotlyfig, filename='./plots/'+ target_name + '_influence_overview.html', auto_open=False)
 
         fi = open('./plots/published_plots'+target_name+'.dat', 'w')
         fi.writelines(published_plots)
@@ -371,7 +420,6 @@ class FactionStats:
         return result
 
 
-
 def fn_update_from_eddb():
     def fn_download_from_ssl(url):
         try:
@@ -395,14 +443,19 @@ def fn_update_from_eddb():
 
 if __name__ == '__main__':
 
+    # Download lates EDDB dump only once
     fn_update_from_eddb()
 
     webpublishing = True
 
     target_name = 'Canonn'
+    # Create oject and load previous factionstat data if existent
     factionstats = FactionStats(target_name)
+    # Add recent and new faction data from current dump to factionstat
     factionstats.fn_pull_data_from_json(target_name)
+    # Save factionstat
     factionstats.fn_save_data(target_name)
+    # Plot from factionstat
     factionstats.fn_plot_system_history(target_name, webpublishing=webpublishing)
 
     target_name = 'Canonn Deep Space Research'
