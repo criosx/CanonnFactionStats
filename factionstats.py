@@ -1,23 +1,49 @@
 import csv
 import os.path
 import pandas as pd
-import pickle
+import datetime
 import time
 import plotly.plotly as py
 import plotly.graph_objs as go
 import plotly
 import io
+from sys import argv
+from bs4 import BeautifulSoup
 import requests
 
-
 class FactionStats:
-    def __init__(self, target_name):
-        # load list with stat data from file
-        # structure of list is [[time, systems pandas dataframe, factions pandas dataframe]]
+    def __init__(self, target_name, mode=""):
 
-        if os.path.isfile('./statdata/factionstat_'+target_name+'.dat'):
+        # load list with stat data from file
+        #
+        # structure of list is [[str(time), systems pandas dataframe, factions pandas dataframe]]
+        # the dataframes are pandas frames converted from the EDDB json dumps after elimination of all entries
+        # not relevant to the faction
+        #
+        # factionstat is expanded daily from the EDDB dump, saved in the standard file
+        # more frequently, the EDDB webpage is being checked for changes, but those changes are only stored
+        # in a temporary file _update until the next dump is available
+
+        filename = './statdata/factionstat_'+target_name+'.csv'
+        filename_update = './statdata/factionstat_'+target_name+'_update.csv'
+
+        if mode == "update":
+            if os.path.isfile(filename_update):
+                self.factionstat = self.fn_load_factionstat(target_name, mode=mode)
+                return
+
+        # even if mode=="update" but no updated file was found, load the standard file
+        if os.path.isfile(filename):
             # self.factionstat = self.fn_load_object('./statdata/factionstat_'+target_name+'.dat')
             self.factionstat = self.fn_load_factionstat(target_name)
+
+            if mode == "update":
+                # duplicate last entry in factionstats when starting temporary file from standard
+                self.factionstat.append(self.factionstat[-1][:])
+            else:
+                # if temporary update exist but standard was loaded, then delete temporary file
+                if os.path.isfile(filename_update):
+                    os.remove(filename_update)
         else:
             print ('Did not find stat file for '+target_name)
             self.factionstat = []
@@ -43,14 +69,6 @@ class FactionStats:
             snapshot[system] = data.copy()
 
         return snapshot
-
-    def fn_load_object(self, filename):
-
-        fi = open(filename, "r")
-        po = pickle.load(fi)
-        fi.close()
-
-        return po
 
     def fn_plot_system_history(self, target_name, webpublishing=False):
         # Plots the influence history of a given system saves data and plots
@@ -385,39 +403,164 @@ class FactionStats:
 
         return True
 
-    def fn_save_object(self, obj, filename):
-        fi = open(filename, "w")
-        pickle.dump(obj, fi)
-        fi.close()
+    def fn_save_factionstat(self, target_name, mode=''):
+        modestr = ''
+        if mode == 'update':
+            modestr = '_update'
 
-    def fn_save_factionstat(self, target_name):
-        with open('./statdata/factionstat_'+target_name+'.csv', 'w') as handle:
+        with open('./statdata/factionstat_' + target_name + modestr + '.csv', 'w') as handle:
             writer = csv.writer(handle, lineterminator='\n')
             for entry in self.factionstat:
                 writer.writerow([entry[0]])
-                entry[1].to_json('./statdata/systems_'+target_name+'_'+entry[0]+'.json')
-                entry[2].to_json('./statdata/factions_'+target_name+'_'+entry[0]+'.json')
+                entry[1].to_json('./statdata/systems_'+target_name+'_'+entry[0]+ modestr + '.json')
+                entry[2].to_json('./statdata/factions_'+target_name+'_'+entry[0]+ modestr + '.json')
 
-    def fn_save_data(self, target_name):
-        # save all data before exit
-        pass
-
-        # self.fn_save_object(self.factionstat, './statdata/factionstat_'+target_name+'.dat')
-        self.fn_save_factionstat(target_name)
-
-    def fn_load_factionstat(self, target_name):
+    def fn_load_factionstat(self, target_name, mode=''):
         result = []
-        with open('./statdata/factionstat_' + target_name + '.csv', 'rb') as handle:
+        modestr = ''
+        if mode == 'update':
+            modestr = '_update'
+
+        with open('./statdata/factionstat_' + target_name + modestr + '.csv', 'rb') as handle:
             reader = csv.reader(handle)
             for row in reader:
                 date = row[0]
-                systems = pd.read_json('./statdata/systems_'+target_name+'_'+date+'.json')
-                factions = pd.read_json('./statdata/factions_'+target_name+'_'+date+'.json')
+                systems = pd.read_json('./statdata/systems_'+target_name+'_'+date + modestr + '.json')
+                factions = pd.read_json('./statdata/factions_'+target_name+'_'+date + modestr + '.json')
                 #systems.set_index("name", inplace=True)
                 #factions.set_index('id', inplace=True)
 
                 result.append([date, systems, factions])
         return result
+
+    def fn_update(self, target_name):
+
+        def isfloat(value):
+            try:
+                float(value)
+                return True
+            except:
+                return False
+
+
+        global_update = False
+
+        systems = self.factionstat[-1][1].copy(deep=False)
+        factions = self.factionstat[-1][2].copy(deep=False)
+
+        found_id = False
+        for faction_id in factions.index.tolist():
+            if target_name == factions.loc[faction_id, 'name']:
+                target_id = faction_id
+                found_id = True
+                break
+
+        if not found_id:
+            print 'Did not find target faction in saved data. Cannot update.'
+            return False
+
+
+        url = 'https://eddb.io/faction/'+ str(target_id)
+        htmlContent = requests.get(url, verify=False)
+        soup = BeautifulSoup(htmlContent.text, 'html.parser')
+
+        entries = soup.find_all("tr", ["systemRow", "systemFactionRow"])
+
+
+        # The entries are currently in the following format when using .stripped_strings
+        #
+        # systemFactionRow:
+        #
+        # u'92.7%'
+        # u'Canonn'
+        # u'Independent'
+        # u'Cooperative'
+        # u'Expansion'
+        # u'Chacobog'
+        # u'Controlling'
+        #
+        # systemRow:
+        #
+        # u'Chacobog'
+        # u'Security:'
+        # u'Medium'
+        # u'State:'
+        # u'Boom'
+        # u'Population:'
+        # u'2,298,725'
+        # u'Power:'
+        # u'None'
+        # u'178.92'
+        # u'ly from Sol'
+        # u'Update: 10 hours'
+
+        system = ''
+        factions_present = []
+        recentupdate = False
+        # parse web page line by line
+        for entry in entries:
+
+            # parse current web page line into list of strings
+            elementlist = []
+            for element in entry.stripped_strings:
+                elementlist.append(element)
+            # look for next system line
+            if elementlist[0] in systems.index:
+                system = elementlist[0]
+                delta_t = 0
+                resolution = ''
+                recentupdate = True
+                updated = elementlist[-1].replace("Update:","")
+                if 'hours' in updated:
+                    delta_t = datetime.timedelta(hours = int(updated.replace("hours","")))
+                    resolution = 'h'
+                elif 'hour' in updated:
+                    delta_t = datetime.timedelta(hours = int(updated.replace("hour","")))
+                    resolution = 'h'
+                elif 'mins' in updated:
+                    delta_t = datetime.timedelta(minutes = int(updated.replace("mins","")))
+                    resolution = 'min'
+                elif 'min' in updated:
+                    delta_t = datetime.timedelta(minutes = int(updated.replace("min","")))
+                    resolution = 'min'
+                else:
+                    recentupdate = False
+                    resolution = 'd'
+
+                if resolution != 'd':
+                    update_estimate = datetime.datetime.fromtimestamp(time.time()+time.timezone).replace(microsecond=0) \
+                                  - delta_t
+                    last_update = systems.loc[system,'updated_at']
+                    dif = update_estimate - last_update
+                    if resolution == 'min':
+                        if dif.total_seconds() < 1*60:
+                            recentupdate = False
+                    if resolution == 'h':
+                        if dif.total_seconds() < 60*60:
+                            recentupdate = False
+
+                if recentupdate:
+                    factions_present = systems.loc[system, 'minor_faction_presences']
+                    global_update = True
+
+            # otherwise check for next faction in the same system, but only when recent update in system detected
+            elif recentupdate:
+                #first entry should be faction influence, check for number
+                first = elementlist[0].replace("%","")
+                if isfloat(first):
+                    influence = round(float(first),1)
+                    name = elementlist[1]
+                    state = elementlist[4]
+
+                    for faction in factions_present:
+                        factionname = factions.loc[faction['minor_faction_id'], 'name']
+                        if factionname == name:
+                            faction['influence'] = influence
+                            faction['state'] = state
+                            systems.loc[system,'updated_at'] = update_estimate
+                            break
+
+        return global_update
 
 
 def fn_update_from_eddb():
@@ -437,29 +580,35 @@ def fn_update_from_eddb():
     factions = fn_download_from_ssl('https://eddb.io/archive/v5/factions.json')
     factions.to_json('./jsondata/factions.json')
 
-
-
 # main program from command line
 
 if __name__ == '__main__':
 
-    # Download lates EDDB dump only once
-    fn_update_from_eddb()
-
     webpublishing = True
+    targetlist = ['Canonn', 'Canonn Deep Space Research']
 
-    target_name = 'Canonn'
-    # Create oject and load previous factionstat data if existent
-    factionstats = FactionStats(target_name)
-    # Add recent and new faction data from current dump to factionstat
-    factionstats.fn_pull_data_from_json(target_name)
-    # Save factionstat
-    factionstats.fn_save_data(target_name)
-    # Plot from factionstat
-    factionstats.fn_plot_system_history(target_name, webpublishing=webpublishing)
+    if len(argv) == 1:
 
-    target_name = 'Canonn Deep Space Research'
-    factionstats = FactionStats(target_name)
-    factionstats.fn_pull_data_from_json(target_name)
-    factionstats.fn_save_data(target_name)
-    factionstats.fn_plot_system_history(target_name, webpublishing=webpublishing)
+        # Download lates EDDB dump only once
+        fn_update_from_eddb()
+
+        for target_name in targetlist:
+            # Create oject and load previous factionstat data if existent
+            factionstats = FactionStats(target_name)
+            # Add recent and new faction data from current dump to factionstat
+            factionstats.fn_pull_data_from_json(target_name)
+            # Save factionstat
+            factionstats.fn_save_factionstat(target_name)
+            # Plot from factionstat
+            factionstats.fn_plot_system_history(target_name, webpublishing=webpublishing)
+
+    elif argv[1] == '-update':
+
+        for target_name in targetlist:
+            # Create oject and load previous factionstat data if existent
+            factionstats = FactionStats(target_name, mode='update')
+            # only plot if there are updates
+            if factionstats.fn_update(target_name):
+                factionstats.fn_save_factionstat(target_name, mode='update')
+                factionstats.fn_plot_system_history(target_name, webpublishing=webpublishing)
+
