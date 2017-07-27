@@ -40,6 +40,7 @@ class FactionStats:
             if mode == "update":
                 # duplicate last entry in factionstats when starting temporary file from standard
                 self.factionstat.append(self.factionstat[-1][:])
+                self.factionstat[-1][0] = time.asctime()
             else:
                 # if temporary update exist but standard was loaded, then delete temporary file
                 if os.path.isfile(filename_update):
@@ -70,7 +71,7 @@ class FactionStats:
 
         return snapshot
 
-    def fn_plot_system_history(self, target_name, webpublishing=False):
+    def fn_plot_system_history(self, target_name, webpublishing=False, updatelist=[]):
         # Plots the influence history of a given system saves data and plots
         # Format:
         # Time Faction1 Faction2 ...
@@ -195,7 +196,7 @@ class FactionStats:
 
             # py.image.save_as(plotlyfig, filename='./plots/' + system + '_snapshot.png')
 
-            if webpublishing:
+            if webpublishing and (updatelist == [] or (system in updatelist)):
                 trycounter = 1
                 while trycounter < 6:
                     try:
@@ -295,7 +296,7 @@ class FactionStats:
             plotlyfig = go.Figure(data=traces, layout=layout)
             # py.image.save_as(plotlyfig, filename='./plots/' + system + '_history.png')
 
-            if webpublishing:
+            if webpublishing and (updatelist == [] or (system in updatelist)):
                 trycounter = 1
                 while trycounter < 6:
                     try:
@@ -442,8 +443,7 @@ class FactionStats:
             except:
                 return False
 
-
-        global_update = False
+        updatelist = []
 
         systems = self.factionstat[-1][1].copy(deep=False)
         factions = self.factionstat[-1][2].copy(deep=False)
@@ -541,7 +541,7 @@ class FactionStats:
 
                 if recentupdate:
                     factions_present = systems.loc[system, 'minor_faction_presences']
-                    global_update = True
+                    updatelist.append(system)
 
             # otherwise check for next faction in the same system, but only when recent update in system detected
             elif recentupdate:
@@ -560,7 +560,7 @@ class FactionStats:
                             systems.loc[system,'updated_at'] = update_estimate
                             break
 
-        return global_update
+        return updatelist
 
 
 def fn_update_from_eddb():
@@ -584,7 +584,7 @@ def fn_update_from_eddb():
 
 if __name__ == '__main__':
 
-    webpublishing = True
+    webpublishing = False
     targetlist = ['Canonn', 'Canonn Deep Space Research']
 
     if len(argv) == 1:
@@ -608,7 +608,8 @@ if __name__ == '__main__':
             # Create oject and load previous factionstat data if existent
             factionstats = FactionStats(target_name, mode='update')
             # only plot if there are updates
-            if factionstats.fn_update(target_name):
+            updatelist = factionstats.fn_update(target_name)
+            if updatelist:
                 factionstats.fn_save_factionstat(target_name, mode='update')
-                factionstats.fn_plot_system_history(target_name, webpublishing=webpublishing)
+                factionstats.fn_plot_system_history(target_name, webpublishing=webpublishing, updatelist=updatelist)
 
