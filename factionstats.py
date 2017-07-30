@@ -602,7 +602,8 @@ if __name__ == '__main__':
             # Plot from factionstat
             factionstats.fn_plot_system_history(target_name, webpublishing=webpublishing)
 
-    elif argv[1] == '-update':
+    # update from webpage can be run separately or is run immediately after EDDB dump integration
+    elif argv[1] == '-update' or len(argv) == 1:
 
         for target_name in targetlist:
             # Create oject and load previous factionstat data if existent
