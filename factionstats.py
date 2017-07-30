@@ -584,7 +584,7 @@ def fn_update_from_eddb():
 
 if __name__ == '__main__':
 
-    webpublishing = False
+    webpublishing = True
     targetlist = ['Canonn', 'Canonn Deep Space Research']
 
     if len(argv) == 1:
