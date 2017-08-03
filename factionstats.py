@@ -652,8 +652,8 @@ class FactionStats:
             # no clearing of cells should be necessary, because table is not supposed to shrink
             ws.update_cell(1, 1, 'System')
             ws.update_cell(1, 2, 'Current Influence (%)')
-            ws.update_cell(1, 3, 'Influence Change 1 day (%)')
-            ws.update_cell(1, 4, 'Influence Change 5 days (%)')
+            ws.update_cell(1, 3, 'Influence Change 1 Day (%)')
+            ws.update_cell(1, 4, 'Influence Change 5 Days (%)')
             for row in range(0, results.shape[0]):
                 for column in range(0, results.shape[1]):
                     ws.update_cell(row+2, column+1, results.iloc[row,column])
@@ -670,7 +670,7 @@ def fn_update_from_eddb():
             frame = pd.read_json(io.StringIO(s.decode('utf-8')))
         except:
             # standard method
-            frame = pd.read_json('https://eddb.io/archive/v5/systems_populated.json')
+            frame = pd.read_json(url)
         return frame
 
     systems_populated = fn_download_from_ssl('https://eddb.io/archive/v5/systems_populated.json')
@@ -683,7 +683,7 @@ def fn_update_from_eddb():
 
 if __name__ == '__main__':
 
-    webpublishing = False
+    webpublishing = True
     targetlist = ['Canonn', 'Canonn Deep Space Research']
 
     if len(argv) == 1:
