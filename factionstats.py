@@ -8,8 +8,15 @@ import plotly.graph_objs as go
 import plotly
 import io
 from sys import argv
+
+# Beautiful Soup requirements
 from bs4 import BeautifulSoup
 import requests
+
+# gspread requirements
+import gspread
+from oauth2client.service_account import ServiceAccountCredentials
+
 
 class FactionStats:
     def __init__(self, target_name, mode=""):
@@ -26,6 +33,7 @@ class FactionStats:
 
         filename = './statdata/factionstat_'+target_name+'.csv'
         filename_update = './statdata/factionstat_'+target_name+'_update.csv'
+        self.target_name = target_name
 
         if mode == "update":
             if os.path.isfile(filename_update):
@@ -48,6 +56,23 @@ class FactionStats:
         else:
             print ('Did not find stat file for '+target_name)
             self.factionstat = []
+
+    def fn_get_system_history(self):
+
+        history = []
+        for entry in self.factionstat:
+            if (time.time()-time.mktime(time.strptime(entry[0]))) < (90*24*60*60+1):
+                history.append(self.fn_get_system_snapshots(entry[1], entry[2]))
+
+        # Get a list of all occupied systems
+        systemlist = []
+        for entry in history:
+            for system in entry:
+                if system not in systemlist:
+                    systemlist.append(system)
+        systemlist.sort()
+
+        return history, systemlist
 
     def fn_get_system_snapshots(self, systems, factions):
         # Creates a dictionary of systems containing pandas dataframe snapshots
@@ -79,25 +104,12 @@ class FactionStats:
         # ...  ...      ...      ...
 
         # Create a list of snapshots over the last 90 days
-
-        py.sign_in('criosix','3jLviaVFikQOH1BZRcew')
-        published_plots = []
-
-        history = []
-        for entry in self.factionstat:
-            if (time.time()-time.mktime(time.strptime(entry[0]))) < (90*24*60*60+1):
-                history.append(self.fn_get_system_snapshots(entry[1], entry[2]))
-
-        # Get a list of all occupied systems
-        systemlist = []
-        for entry in history:
-            for system in entry:
-                if system not in systemlist:
-                    systemlist.append(system)
-        systemlist.sort()
+        history, systemlist = self.fn_get_system_history()
 
         # Create data and plots for all systems
-        target_faction_overview_traces=[]
+        py.sign_in('criosix','3jLviaVFikQOH1BZRcew')
+        published_plots = []
+        target_faction_overview_traces = []
         for system in systemlist:
 
             # Get list of all factions
@@ -207,7 +219,7 @@ class FactionStats:
                     except:
                         print ('Failed to publish '+system+'_history')
                         print ('Waiting for 30 s ...')
-                        print time.sleep(30)
+                        time.sleep(30)
                         trycounter += 1
 
             # History
@@ -307,7 +319,7 @@ class FactionStats:
                     except:
                         print ('Failed to publish '+system+'_history')
                         print ('Waiting for 30 s ...')
-                        print time.sleep(30)
+                        time.sleep(30)
                         trycounter += 1
 
             # plotly.offline.plot(plotlyfig, filename='./plots/'+ system + '_history.html', auto_open=False)
@@ -336,7 +348,7 @@ class FactionStats:
                 except:
                     print ('Failed to publish ' + target_name + '_influence_overview')
                     print ('Waiting for 30 s ...')
-                    print time.sleep(30)
+                    time.sleep(30)
                     trycounter += 1
 
         # plotly.offline.plot(plotlyfig, filename='./plots/'+ target_name + '_influence_overview.html', auto_open=False)
@@ -366,7 +378,7 @@ class FactionStats:
                 break
 
         if not found_id:
-            print 'Did not find target faction in EDDB dump'
+            print('Did not find target faction in EDDB dump')
             return False
 
         system_names_target = []
@@ -456,7 +468,7 @@ class FactionStats:
                 break
 
         if not found_id:
-            print 'Did not find target faction in saved data. Cannot update.'
+            print('Did not find target faction in saved data. Cannot update.')
             return False
 
 
@@ -497,6 +509,8 @@ class FactionStats:
         system = ''
         factions_present = []
         recentupdate = False
+        influenceupdate = False
+        unknownsystem = False
         # parse web page line by line
         for entry in entries:
 
@@ -510,6 +524,8 @@ class FactionStats:
                 delta_t = 0
                 resolution = ''
                 recentupdate = True
+                influenceupdate = False
+                unknownsystem = False
                 updated = elementlist[-1].replace("Update:","")
                 if 'hours' in updated:
                     delta_t = datetime.timedelta(hours = int(updated.replace("hours","")))
@@ -525,6 +541,7 @@ class FactionStats:
                     resolution = 'min'
                 else:
                     recentupdate = False
+                    influenceupdate = False
                     resolution = 'd'
 
                 if resolution != 'd':
@@ -539,28 +556,109 @@ class FactionStats:
                         if dif.total_seconds() < 60*60:
                             recentupdate = False
 
-                if recentupdate:
-                    factions_present = systems.loc[system, 'minor_faction_presences']
-                    updatelist.append(system)
+                factions_present = systems.loc[system, 'minor_faction_presences']
 
-            # otherwise check for next faction in the same system, but only when recent update in system detected
-            elif recentupdate:
+            # otherwise check if it is a faction line for the same system avoiding a 'runover' into the faction
+            # lines of an unknown system
+            elif isfloat(elementlist[0].replace("%","")) and not unknownsystem:
                 #first entry should be faction influence, check for number
                 first = elementlist[0].replace("%","")
-                if isfloat(first):
-                    influence = round(float(first),1)
-                    name = elementlist[1]
-                    state = elementlist[4]
+                influence = round(float(first),1)
+                name = elementlist[1]
+                state = elementlist[4]
 
-                    for faction in factions_present:
-                        factionname = factions.loc[faction['minor_faction_id'], 'name']
-                        if factionname == name:
+                for faction in factions_present:
+                    factionname = factions.loc[faction['minor_faction_id'], 'name']
+                    if factionname == name:
+                        if (round(float(faction['influence']), 1) != influence) or (faction['state'] != state) or recentupdate:
                             faction['influence'] = influence
                             faction['state'] = state
+                            influenceupdate = True
+                        if recentupdate:
                             systems.loc[system,'updated_at'] = update_estimate
-                            break
+                        break
+
+                if (recentupdate or influenceupdate) and (system not in updatelist):
+                    updatelist.append(system)
+
+            # unknown system in which the faction is present - possibly due to recent expansion
+            else:
+                unknownsystem = True
 
         return updatelist
+
+
+    def fn_update_google_sheet(self, target_name):
+
+        # sign in to google sheets using gspread
+        # following directions given on the GitHub page
+        scope = ['https://spreadsheets.google.com/feeds']
+        credentials = ServiceAccountCredentials.from_json_keyfile_name(
+            '/Users/frank/PycharmProjects/CanonnFactionStats/Canonn Sheet.json', scope)
+        gc = gspread.authorize(credentials)
+        gs = gc.open('Canonn Faction Data')
+        ws = gs.worksheet("Influence " + target_name)
+
+        history, systemlist = self.fn_get_system_history()
+        results = pd.DataFrame(columns=['System', 'Influence', 'Influence Change 1 Day', 'Influence Change 5 Days'])
+
+        # minimum history length is 6 mostly for change in influence calculation
+        if len(history) < 6:
+            return
+
+        # Obtain momentary influence and influence change for every system
+        for system in systemlist:
+
+            # check if system is still occupied by Canonn
+            if system not in history[-1].keys():
+                continue
+
+            faction_row_m2 = history[-3][system].loc[(history[-3][system]['Faction'] == target_name)]
+            faction_row_m1 = history[-2][system].loc[(history[-2][system]['Faction'] == target_name)]
+            faction_row = history[-1][system].loc[(history[-1][system]['Faction'] == target_name)]
+
+            # need target faction data for all three timepoints
+            if faction_row.shape[0] + faction_row_m1.shape[0] + faction_row_m2.shape[0] != 3:
+                influencedelta = 0
+            else:
+                # calculate values of interest
+                # For the influence change it is hard to say whether there was a tick happening between the last
+                # two entries, therefore if there is no change in influence and the time difference is less than
+                # one day, it is assumed that no tick occured. This will not always be true.
+                timedelta = faction_row['Last Time Updated'].iloc[0] - faction_row_m1['Last Time Updated'].iloc[0]
+                influencedelta = faction_row['Influence'].iloc[0] - faction_row_m1['Influence'].iloc[0]
+                if timedelta.total_seconds() < 24 * 60 * 60 and influencedelta == 0:
+                    influencedelta = faction_row['Influence'].iloc[0] - faction_row_m2['Influence'].iloc[0]
+
+            faction_row_m4 = history[-4][system].loc[(history[-4][system]['Faction'] == target_name)]
+            faction_row_m5 = history[-5][system].loc[(history[-5][system]['Faction'] == target_name)]
+            faction_row_m6 = history[-6][system].loc[(history[-6][system]['Faction'] == target_name)]
+
+            if faction_row_m4.shape[0] + faction_row_m5.shape[0] + faction_row_m6.shape[0] != 3:
+                influencedelta5 = 0
+            else:
+                timedelta = faction_row['Last Time Updated'].iloc[0] - faction_row_m4['Last Time Updated'].iloc[0]
+                influencedelta5 = faction_row['Influence'].iloc[0] - faction_row_m4['Influence'].iloc[0]
+                if timedelta.total_seconds() < 5 * 24 * 60 * 60:
+                    timedelta = faction_row['Last Time Updated'].iloc[0] - faction_row_m5['Last Time Updated'].iloc[0]
+                    influencedelta5 = faction_row['Influence'].iloc[0] - faction_row_m5['Influence'].iloc[0]
+                    if timedelta.total_seconds() < 5 * 24 * 60 * 60:
+                        influencedelta5 = faction_row['Influence'].iloc[0] - faction_row_m6['Influence'].iloc[0]
+
+            results.loc[results.shape[0]] = [system, round(faction_row['Influence'].iloc[0], 1),
+                                             round(influencedelta, 1), round(influencedelta5, 1)]
+
+            # write data out to worksheet
+            # no clearing of cells should be necessary, because table is not supposed to shrink
+            ws.update_cell(1, 1, 'System')
+            ws.update_cell(1, 2, 'Current Influence (%)')
+            ws.update_cell(1, 3, 'Influence Change 1 day (%)')
+            ws.update_cell(1, 4, 'Influence Change 5 days (%)')
+            for row in range(0, results.shape[0]):
+                for column in range(0, results.shape[1]):
+                    ws.update_cell(row+2, column+1, results.iloc[row,column])
+
+        return
 
 
 def fn_update_from_eddb():
@@ -580,11 +678,12 @@ def fn_update_from_eddb():
     factions = fn_download_from_ssl('https://eddb.io/archive/v5/factions.json')
     factions.to_json('./jsondata/factions.json')
 
+
 # main program from command line
 
 if __name__ == '__main__':
 
-    webpublishing = True
+    webpublishing = False
     targetlist = ['Canonn', 'Canonn Deep Space Research']
 
     if len(argv) == 1:
@@ -602,8 +701,8 @@ if __name__ == '__main__':
             # Plot from factionstat
             factionstats.fn_plot_system_history(target_name, webpublishing=webpublishing)
 
-    # update from webpage can be run separately or is run immediately after EDDB dump integration
-    elif argv[1] == '-update' or len(argv) == 1:
+    # TODO: update from webpage can be run separately or is run immediately after EDDB dump integration
+    elif argv[1] == '-update':
 
         for target_name in targetlist:
             # Create oject and load previous factionstat data if existent
@@ -613,4 +712,16 @@ if __name__ == '__main__':
             if updatelist:
                 factionstats.fn_save_factionstat(target_name, mode='update')
                 factionstats.fn_plot_system_history(target_name, webpublishing=webpublishing, updatelist=updatelist)
+
+    elif argv[1] == '-google':
+
+        for target_name in targetlist:
+            # Create oject and load previous factionstat data if existent
+            factionstats = FactionStats(target_name, mode='update')
+            # only plot if there are updates
+            factionstats.fn_update_google_sheet(target_name)
+
+
+
+
 
