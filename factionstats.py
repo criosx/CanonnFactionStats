@@ -62,7 +62,7 @@ class FactionStats:
         history = []
         for entry in self.factionstat:
             if (time.time()-time.mktime(time.strptime(entry[0]))) < (90*24*60*60+1):
-                history.append(self.fn_get_system_snapshots(entry[1], entry[2]))
+                history.append(self.fn_get_system_snapshots(systems=entry[1], factions=entry[2]))
 
         # Get a list of all occupied systems
         systemlist = []
@@ -92,7 +92,7 @@ class FactionStats:
                 updated = systems.loc[system, 'updated_at']
                 factionname = factions.loc[faction['minor_faction_id'], 'name']
                 data.loc[data.shape[0]] = [factionname, influence, state, updated]
-            snapshot[system] = data.copy()
+            snapshot[system] = data
 
         return snapshot
 
@@ -112,7 +112,7 @@ class FactionStats:
         target_faction_overview_traces = []
         for system in systemlist:
 
-            # Get list of all factions
+            # Get list of all factions, ever in history
             factionlist = []
             for entry in history:
                 if system in entry.keys():
@@ -279,16 +279,16 @@ class FactionStats:
                 if faction == target_name:
                     width = 3
                     color = 'cornflowerblue'
-                    trace = go.Scatter(x=data['Date'].tolist(), y=ydata_round, mode='lines+markers'
+                    trace = go.Scatter(x=data['Date'], y=ydata_round, mode='lines+markers'
                                        , name=faction, line=dict(shape='spline', width=width, color=color),
                                        text=text_markers, marker=dict(size=size, line=dict(width=0), symbol='circle'))
-                    target_faction_overview_traces.append(go.Scatter(x=data['Date'].tolist(), y=ydata_round,
+                    target_faction_overview_traces.append(go.Scatter(x=data['Date'], y=ydata_round,
                                                                      mode='lines+markers', name=system,
                                                                      line=dict(shape='spline', width=2),
                                        text=text_markers, marker=dict(size=size, line=dict(width=0), symbol='circle')))
                 else:
                     width = 2
-                    trace = go.Scatter(x=data['Date'].tolist(), y=ydata_round, mode='lines+markers',
+                    trace = go.Scatter(x=data['Date'], y=ydata_round, mode='lines+markers',
                                        name=faction, line=dict(shape='spline', width=width),
                                        text=text_markers, marker=dict(size=size, line=dict(width=0), symbol='circle'))
 
@@ -438,6 +438,7 @@ class FactionStats:
             reader = csv.reader(handle)
             for row in reader:
                 date = row[0]
+                # print('./statdata/systems_'+target_name+'_'+date + modestr + '.json')
                 systems = pd.read_json('./statdata/systems_'+target_name+'_'+date + modestr + '.json')
                 factions = pd.read_json('./statdata/factions_'+target_name+'_'+date + modestr + '.json')
                 #systems.set_index("name", inplace=True)
@@ -590,73 +591,188 @@ class FactionStats:
 
     def fn_update_google_sheet(self, target_name):
 
-        # sign in to google sheets using gspread
-        # following directions given on the GitHub page
-        scope = ['https://spreadsheets.google.com/feeds']
-        credentials = ServiceAccountCredentials.from_json_keyfile_name(
-            '/Users/frank/PycharmProjects/CanonnFactionStats/Canonn Sheet.json', scope)
-        gc = gspread.authorize(credentials)
-        gs = gc.open('Canonn Faction Data')
-        ws = gs.worksheet("Influence " + target_name)
+        def fn_tick_time(dt):
+            # imports a datetime object and assuming that the tick occurs at 22:50 PM (UTC) every day
+            # times before are set to 12 PM and times after that time are set to 12 PM the following day
+            if dt.hour < 22:
+                before = True
+            elif dt.hour > 22:
+                before = False
+            elif dt.minute < 50:
+                before = True
+            else:
+                before = False
+
+            if not before:
+                dt += datetime.timedelta(days=1)
+
+            dt = dt.replace(hour=12, minute=0, second=0)
+
+            return dt
+
+        currenttime = fn_tick_time(datetime.datetime.fromtimestamp(time.time() + time.timezone).replace(microsecond=0))
 
         history, systemlist = self.fn_get_system_history()
-        results = pd.DataFrame(columns=['System', 'Influence', 'Influence Change 1 Day', 'Influence Change 5 Days'])
+        results = pd.DataFrame(columns=['System', 'Influence', 'Influence Change 1 Day', 'Influence Change 5 Days',
+                                        'Updated'])
+
+        # results for single maximum chang in influence (absolute, positive, negative)
+        single_ichange_ranges = [1, 3, 5, 7, 14, 28]
+        single_ichange_labels = ['1 Day','3 Days','5 Days','7 Days', '14 Days', '28 Days']
+        results_single = pd.DataFrame(columns=single_ichange_labels)
+        results_single_pos = pd.DataFrame(columns=single_ichange_labels)
+        results_single_neg = pd.DataFrame(columns=single_ichange_labels)
 
         # minimum history length is 6 mostly for change in influence calculation
-        if len(history) < 6:
+        if len(history) < 1:
             return
 
         # Obtain momentary influence and influence change for every system
         for system in systemlist:
 
-            # check if system is still occupied by Canonn
+            # check if system is still occupied by target faction
             if system not in history[-1].keys():
                 continue
 
-            faction_row_m2 = history[-3][system].loc[(history[-3][system]['Faction'] == target_name)]
-            faction_row_m1 = history[-2][system].loc[(history[-2][system]['Faction'] == target_name)]
+            if system == 'Aymarahuara':
+                pass
+
             faction_row = history[-1][system].loc[(history[-1][system]['Faction'] == target_name)]
+            historypos = 1
+            onedaychange = False
+            fivedaychange = False
+            single_ichange_values = [0, 0, 0, 0, 0, 0]
+            single_ichange_values_pos = single_ichange_values[:]
+            single_ichange_values_neg = single_ichange_values[:]
+            previous_influence = faction_row['Influence'].iloc[0]
+            previous_timedelta = datetime.timedelta(hours=0)
 
-            # need target faction data for all three timepoints
-            if faction_row.shape[0] + faction_row_m1.shape[0] + faction_row_m2.shape[0] != 3:
-                influencedelta = 0
+            while True:
+
+                historypos = historypos + 1
+
+                # make sure that history extends sufficiently long for next time point
+                if len(history) < historypos:
+                    break
+
+                # evaluate next time point back in history and check whether system is in history
+                if system in history[-1*historypos].keys():
+                    faction_row_m = history[-1*historypos][system].loc[(history[-1*historypos][system]['Faction']
+                                                                    == target_name)]
+                else:
+                    break
+
+                # check if system is occupied by target faction at this time, if not stop evaluating history
+                if faction_row_m.shape[0] != 1:
+                    break
+
+                # time and influence change since last reported entry
+                # the tick occurs only once a day, if a influence change is observed, this means they are one day apart
+                timedelta = fn_tick_time(faction_row['Last Time Updated'].iloc[0]) - \
+                            fn_tick_time(faction_row_m['Last Time Updated'].iloc[0])
+                influence = faction_row_m['Influence'].iloc[0]
+                influencedelta = faction_row['Influence'].iloc[0] - influence
+                if previous_timedelta.total_seconds() < 24 * 60 * 60:
+                    influencedelta1 = influencedelta
+                elif previous_timedelta.total_seconds() < 5 * 24 * 60 * 60:
+                    influencedelta5 = influencedelta
+
+                # update single influence change values (absolute, positive, negative)
+                for i, days in enumerate(single_ichange_ranges):
+                    if (previous_timedelta).total_seconds() < days * 24 * 60 * 60:
+                        influencedelta_single = previous_influence - influence
+                        if abs(influencedelta_single) > abs(single_ichange_values[i]):
+                            single_ichange_values[i] = round(influencedelta_single, 1)
+                        if influencedelta_single > single_ichange_values_pos[i]:
+                            single_ichange_values_pos[i] = round(influencedelta_single, 1)
+                        if influencedelta_single < single_ichange_values_neg[i]:
+                            single_ichange_values_neg[i] = round(influencedelta_single, 1)
+
+                # check for break out of while loop because the maximum time range has been sampled
+                if (timedelta).total_seconds() > single_ichange_ranges[-1] * 24 * 60 * 60:
+                    break
+
+                previous_influence = influence
+                previous_timedelta = timedelta
+
+            timedelta = currenttime -fn_tick_time(faction_row['Last Time Updated'].iloc[0])
+            if timedelta.total_seconds() < 24 * 60 * 60:
+                tstring = 'current'
+            elif timedelta.total_seconds() < 2 * 24 * 60 * 60:
+                tstring = ' 1 tick ago'
             else:
-                # calculate values of interest
-                # For the influence change it is hard to say whether there was a tick happening between the last
-                # two entries, therefore if there is no change in influence and the time difference is less than
-                # one day, it is assumed that no tick occured. This will not always be true.
-                timedelta = faction_row['Last Time Updated'].iloc[0] - faction_row_m1['Last Time Updated'].iloc[0]
-                influencedelta = faction_row['Influence'].iloc[0] - faction_row_m1['Influence'].iloc[0]
-                if timedelta.total_seconds() < 24 * 60 * 60 and influencedelta == 0:
-                    influencedelta = faction_row['Influence'].iloc[0] - faction_row_m2['Influence'].iloc[0]
-
-            faction_row_m4 = history[-4][system].loc[(history[-4][system]['Faction'] == target_name)]
-            faction_row_m5 = history[-5][system].loc[(history[-5][system]['Faction'] == target_name)]
-            faction_row_m6 = history[-6][system].loc[(history[-6][system]['Faction'] == target_name)]
-
-            if faction_row_m4.shape[0] + faction_row_m5.shape[0] + faction_row_m6.shape[0] != 3:
-                influencedelta5 = 0
-            else:
-                timedelta = faction_row['Last Time Updated'].iloc[0] - faction_row_m4['Last Time Updated'].iloc[0]
-                influencedelta5 = faction_row['Influence'].iloc[0] - faction_row_m4['Influence'].iloc[0]
-                if timedelta.total_seconds() < 5 * 24 * 60 * 60:
-                    timedelta = faction_row['Last Time Updated'].iloc[0] - faction_row_m5['Last Time Updated'].iloc[0]
-                    influencedelta5 = faction_row['Influence'].iloc[0] - faction_row_m5['Influence'].iloc[0]
-                    if timedelta.total_seconds() < 5 * 24 * 60 * 60:
-                        influencedelta5 = faction_row['Influence'].iloc[0] - faction_row_m6['Influence'].iloc[0]
+                tstring = str(int(round(timedelta.total_seconds()/(24 * 60 * 60), 0))) + ' ticks ago'
 
             results.loc[results.shape[0]] = [system, round(faction_row['Influence'].iloc[0], 1),
-                                             round(influencedelta, 1), round(influencedelta5, 1)]
+                                             round(influencedelta1, 1), round(influencedelta5, 1), tstring]
+            results_single.loc[results_single.shape[0]] = single_ichange_values
+            results_single_pos.loc[results_single_pos.shape[0]] = single_ichange_values_pos
+            results_single_neg.loc[results_single_neg.shape[0]] = single_ichange_values_neg
 
-            # write data out to worksheet
-            # no clearing of cells should be necessary, because table is not supposed to shrink
-            ws.update_cell(1, 1, 'System')
-            ws.update_cell(1, 2, 'Current Influence (%)')
-            ws.update_cell(1, 3, 'Influence Change 1 Day (%)')
-            ws.update_cell(1, 4, 'Influence Change 5 Days (%)')
-            for row in range(0, results.shape[0]):
-                for column in range(0, results.shape[1]):
-                    ws.update_cell(row+2, column+1, results.iloc[row,column])
+        # write data out to worksheet
+        # sign in to google sheets using gspread
+        # following directions given on the GitHub page
+
+        scope = ['https://spreadsheets.google.com/feeds']
+        credentials = ServiceAccountCredentials.from_json_keyfile_name(
+            'Canonn Sheet.json', scope)
+        gc = gspread.authorize(credentials)
+        gs = gc.open('Canonn Faction Data')
+        ws = gs.worksheet("Influence " + target_name)
+
+        # Influence and Cumulative Influence table
+        rowd0 = results.shape[0]
+        cold0 = results.shape[1]
+        cell_list = ws.range(1, 1, rowd0+2, cold0)
+        # Header
+        cell_list[0].value = 'System'
+        cell_list[1].value = 'Last Reported Influence (%)'
+        cell_list[2].value = 'Change 1 Day (%)'
+        cell_list[3].value = 'Change 5 Days (%)'
+        cell_list[4].value = 'Last Update'
+        # Body
+        idx = 5
+        for row in range(0, rowd0):
+            for column in range(0, cold0):
+                cell_list[idx].value = results.iloc[row, column]
+                idx += 1
+        # Delete one row after the last in case a retreat of the faction occured
+        for column in range(0, cold0):
+            cell_list[idx].value = ''
+            idx += 1
+
+        ws.update_cells(cell_list)
+
+        # write out maximum single influence change data (average, positive, negative)
+        rowd = results_single.shape[0]
+        cold = results_single.shape[1]
+        cell_list_abs = ws.range(1, cold0+2,            rowd+2, cold0+2+cold-1)
+        cell_list_pos = ws.range(1, cold0+2+(cold+1),   rowd+2, cold0+2+(cold+1)+cold-1)
+        cell_list_neg = ws.range(1, cold0+2+2*(cold+1), rowd+2, cold0+2+2*(cold+1)+cold-1)
+        # Header
+        idx = 0
+        for i, day in enumerate(single_ichange_ranges):
+            cell_list_abs[idx].value = single_ichange_labels[i]
+            cell_list_pos[idx].value = single_ichange_labels[i]
+            cell_list_neg[idx].value = single_ichange_labels[i]
+            idx += 1
+        # Body
+        for row in range(0, rowd):
+            for column in range(0, cold):
+                cell_list_abs[idx].value = results_single.iloc[row, column]
+                cell_list_pos[idx].value = results_single_pos.iloc[row, column]
+                cell_list_neg[idx].value = results_single_neg.iloc[row, column]
+                idx += 1
+        # Delete one row after the last in case a retreat of the faction occured
+        for column in range(0, results_single.shape[1]):
+            cell_list_abs[idx].value = ''
+            cell_list_pos[idx].value = ''
+            cell_list_neg[idx].value = ''
+            idx += 1
+
+        ws.update_cells(cell_list_abs)
+        ws.update_cells(cell_list_pos)
+        ws.update_cells(cell_list_neg)
 
         return
 
@@ -712,16 +828,5 @@ if __name__ == '__main__':
             if updatelist:
                 factionstats.fn_save_factionstat(target_name, mode='update')
                 factionstats.fn_plot_system_history(target_name, webpublishing=webpublishing, updatelist=updatelist)
-
-    elif argv[1] == '-google':
-
-        for target_name in targetlist:
-            # Create oject and load previous factionstat data if existent
-            factionstats = FactionStats(target_name, mode='update')
-            # only plot if there are updates
-            factionstats.fn_update_google_sheet(target_name)
-
-
-
-
+                factionstats.fn_update_google_sheet(target_name)
 
