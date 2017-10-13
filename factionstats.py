@@ -438,7 +438,7 @@ class FactionStats:
             reader = csv.reader(handle)
             for row in reader:
                 date = row[0]
-                # print('./statdata/systems_'+target_name+'_'+date + modestr + '.json')
+                #print('./statdata/systems_'+target_name+'_'+date + modestr + '.json')
                 systems = pd.read_json('./statdata/systems_'+target_name+'_'+date + modestr + '.json')
                 factions = pd.read_json('./statdata/factions_'+target_name+'_'+date + modestr + '.json')
                 #systems.set_index("name", inplace=True)
@@ -461,51 +461,34 @@ class FactionStats:
         systems = self.factionstat[-1][1].copy(deep=False)
         factions = self.factionstat[-1][2].copy(deep=False)
 
-        found_id = False
-        for faction_id in factions.index.tolist():
-            if target_name == factions.loc[faction_id, 'name']:
-                target_id = faction_id
-                found_id = True
-                break
-
-        if not found_id:
+        searchresult = factions.loc[factions['name'] == target_name]
+        if searchresult.empty:
             print('Did not find target faction in saved data. Cannot update.')
             return False
-
+        else:
+            target_id = searchresult.index[0]
 
         url = 'https://eddb.io/faction/'+ str(target_id)
         htmlContent = requests.get(url, verify=False)
         soup = BeautifulSoup(htmlContent.text, 'html.parser')
-
         entries = soup.find_all("tr", ["systemRow", "systemFactionRow"])
-
 
         # The entries are currently in the following format when using .stripped_strings
         #
-        # systemFactionRow:
+        # systemFactionRow:                     systemRow:
         #
-        # u'92.7%'
-        # u'Canonn'
-        # u'Independent'
-        # u'Cooperative'
-        # u'Expansion'
-        # u'Chacobog'
-        # u'Controlling'
-        #
-        # systemRow:
-        #
-        # u'Chacobog'
-        # u'Security:'
-        # u'Medium'
-        # u'State:'
-        # u'Boom'
-        # u'Population:'
-        # u'2,298,725'
-        # u'Power:'
-        # u'None'
-        # u'178.92'
-        # u'ly from Sol'
-        # u'Update: 10 hours'
+        # u'92.7%'                              u'Chacobog'
+        # u'Canonn'                             u'Security:'
+        # u'Independent'                        u'Medium'
+        # u'Cooperative'                        u'State:'
+        # u'Expansion'                          u'Boom'
+        # u'Chacobog'                           u'Population:'
+        # u'Controlling'                        u'2,298,725'
+        #                                       u'Power:'
+        #                                       u'None'
+        #                                       u'178.92'
+        #                                       u'ly from Sol'
+        #                                       u'Update: 10 hours'
 
         system = ''
         factions_present = []
@@ -616,7 +599,7 @@ class FactionStats:
         results = pd.DataFrame(columns=['System', 'Influence', 'Influence Change 1 Day', 'Influence Change 5 Days',
                                         'Updated'])
 
-        # results for single maximum chang in influence (absolute, positive, negative)
+        # results for single maximum change in influence (absolute, positive, negative)
         single_ichange_ranges = [1, 3, 5, 7, 14, 28]
         single_ichange_labels = ['1 Day','3 Days','5 Days','7 Days', '14 Days', '28 Days']
         results_single = pd.DataFrame(columns=single_ichange_labels)
@@ -639,8 +622,8 @@ class FactionStats:
 
             faction_row = history[-1][system].loc[(history[-1][system]['Faction'] == target_name)]
             historypos = 1
-            onedaychange = False
-            fivedaychange = False
+            influencedelta1 = 0
+            influencedelta5 = 0
             single_ichange_values = [0, 0, 0, 0, 0, 0]
             single_ichange_values_pos = single_ichange_values[:]
             single_ichange_values_neg = single_ichange_values[:]
@@ -794,6 +777,55 @@ def fn_update_from_eddb():
     factions = fn_download_from_ssl('https://eddb.io/archive/v5/factions.json')
     factions.to_json('./jsondata/factions.json')
 
+def fn_recreate_factionstat_csv_():
+
+    def cmp_items(a, b):
+
+        atime = time.mktime(time.strptime(a))
+        btime = time.mktime(time.strptime(b))
+        if atime> btime:
+            return 1
+        elif atime == btime:
+            return 0
+        else:
+            return -1
+
+    filelist = os.listdir("./statdata/")
+    finalfilelist = []
+    for i,element in enumerate(filelist):
+        if ('.json' in element) and ('Canonn' in element) and not ('update' in element) and not ('Deep' in element) \
+                and not ('system'in element):
+            astring = element
+            astring = astring.replace('factions_Canonn_','')
+            astring = astring.replace('.json','')
+            finalfilelist.append(astring)
+
+    finalfilelist.sort(cmp_items)
+
+    with open('./statdata/factionstat_Canonn.csv', 'w') as handle:
+        writer = csv.writer(handle, lineterminator='\n')
+        for entry in finalfilelist:
+            writer.writerow([entry])
+
+    filelist = os.listdir("./statdata/")
+    finalfilelist = []
+    for i,element in enumerate(filelist):
+        if ('.json' in element) and ('Canonn' in element) and not ('update' in element) and ('Deep' in element) \
+                and not ('system'in element):
+            astring = element
+            astring = astring.replace('factions_Canonn Deep Space Research_','')
+            astring = astring.replace('.json','')
+            finalfilelist.append(astring)
+
+    finalfilelist.sort(cmp_items)
+
+    with open('./statdata/factionstat_Canonn Deep Space Research.csv', 'w') as handle:
+        writer = csv.writer(handle, lineterminator='\n')
+        for entry in finalfilelist:
+            writer.writerow([entry])
+
+
+    pass
 
 # main program from command line
 
@@ -802,31 +834,63 @@ if __name__ == '__main__':
     webpublishing = True
     targetlist = ['Canonn', 'Canonn Deep Space Research']
 
+    # emergency restoration of factioinstat.csv for Canonn in case it got deleted
+    # fn_recreate_factionstat_csv_()
+
     if len(argv) == 1:
 
         # Download lates EDDB dump only once
+        print ('Updating from EDDB')
+        print (datetime.datetime.now())
+
         fn_update_from_eddb()
 
         for target_name in targetlist:
             # Create oject and load previous factionstat data if existent
+            print ('load faction data')
+            print (datetime.datetime.now())
             factionstats = FactionStats(target_name)
             # Add recent and new faction data from current dump to factionstat
+            print ('parse eddb dump')
+            print (datetime.datetime.now())
             factionstats.fn_pull_data_from_json(target_name)
             # Save factionstat
+            print ('save faction data')
+            print (datetime.datetime.now())
             factionstats.fn_save_factionstat(target_name)
             # Plot from factionstat
+            print ('make plots')
+            print (datetime.datetime.now())
             factionstats.fn_plot_system_history(target_name, webpublishing=webpublishing)
 
-    # TODO: update from webpage can be run separately or is run immediately after EDDB dump integration
-    elif argv[1] == '-update':
+    # update from webpage can be run separately or is run immediately after EDDB dump integration
+    # short circuit operator or evaluates second expression only if first is false
+    if len(argv) == 1 or argv[1] == '-update':
+
+        currenttime = datetime.datetime.fromtimestamp(time.time() + time.timezone).replace(microsecond=0)
+        ticktime = currenttime.replace(hour=22, minute=50)
 
         for target_name in targetlist:
             # Create oject and load previous factionstat data if existent
+            print ('load factiondata for update')
+            print (datetime.datetime.now())
             factionstats = FactionStats(target_name, mode='update')
             # only plot if there are updates
+            print ('create updatelist')
+            print (datetime.datetime.now())
             updatelist = factionstats.fn_update(target_name)
             if updatelist:
+                print ('save faction data')
+                print (datetime.datetime.now())
                 factionstats.fn_save_factionstat(target_name, mode='update')
+                print ('make updated plots')
+                print (datetime.datetime.now())
                 factionstats.fn_plot_system_history(target_name, webpublishing=webpublishing, updatelist=updatelist)
+                print ('update google sheet')
+                print (datetime.datetime.now())
                 factionstats.fn_update_google_sheet(target_name)
+            elif abs((currenttime-ticktime).total_seconds()) < 30 * 60:
+                # perform google sheet update within 30 min of tick independent of changes
+                factionstats.fn_update_google_sheet(target_name)
+
 
