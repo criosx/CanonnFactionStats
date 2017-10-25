@@ -1,5 +1,5 @@
 import csv
-import os.path
+import os
 import pandas as pd
 import datetime
 import time
@@ -7,6 +7,7 @@ import plotly.plotly as py
 import plotly.graph_objs as go
 import plotly
 import io
+import glob
 from sys import argv
 
 # Beautiful Soup requirements
@@ -39,6 +40,11 @@ class FactionStats:
             if os.path.isfile(filename_update):
                 self.factionstat = self.fn_load_factionstat(target_name, mode=mode)
                 return
+        else:
+            #remove all update files
+            for path in glob.glob('./statdata/*update*'):
+                os.remove(path)
+
 
         # even if mode=="update" but no updated file was found, load the standard file
         if os.path.isfile(filename):
@@ -105,6 +111,10 @@ class FactionStats:
 
         # Create a list of snapshots over the last 90 days
         history, systemlist = self.fn_get_system_history()
+
+        # save for possible later use in google chart updating
+        self.history = history
+        self.systemlist = systemlist
 
         # Create data and plots for all systems
         py.sign_in('criosix','3jLviaVFikQOH1BZRcew')
@@ -412,7 +422,9 @@ class FactionStats:
 
         if self.factionstat == [] or not (self.factionstat[-1][1].equals(systems_target)
                                           and self.factionstat[-1][2].equals(factions_target)):
-            self.factionstat.append([time.asctime(), systems_target, factions_target])
+            # Flag new item for saving
+            bModified = True
+            self.factionstat.append([time.asctime(), systems_target, factions_target, bModified])
 
         return True
 
@@ -425,26 +437,54 @@ class FactionStats:
             writer = csv.writer(handle, lineterminator='\n')
             for entry in self.factionstat:
                 writer.writerow([entry[0]])
+
+        for entry in self.factionstat:
+            #check if modified, otherwise do not save
+            if entry[3]:
                 entry[1].to_json('./statdata/systems_'+target_name+'_'+entry[0]+ modestr + '.json')
                 entry[2].to_json('./statdata/factions_'+target_name+'_'+entry[0]+ modestr + '.json')
 
     def fn_load_factionstat(self, target_name, mode=''):
         result = []
-        modestr = ''
         if mode == 'update':
             modestr = '_update'
+        else:
+            modestr = ''
 
+        doc = []
         with open('./statdata/factionstat_' + target_name + modestr + '.csv', 'rb') as handle:
             reader = csv.reader(handle)
             for row in reader:
-                date = row[0]
-                #print('./statdata/systems_'+target_name+'_'+date + modestr + '.json')
+                doc.append(row)
+
+        for row in doc:
+            date = row[0]
+            #print('./statdata/systems_'+target_name+'_'+date + modestr + '.json')
+            # if _update file does not exist, load regular file
+            if mode == 'update' and not os.path.isfile('./statdata/systems_'+target_name+'_'+date + modestr + '.json'):
+                systems = pd.read_json('./statdata/systems_' + target_name + '_' + date + '.json')
+                factions = pd.read_json('./statdata/factions_' + target_name + '_' + date + '.json')
+                # During further processing individual entries can be modified
+                # This flag is set to detect those modifications and avoid saving the entire list of states everytime
+                bModified = False
+                result.append([date, systems, factions, bModified])
+
+            elif os.path.isfile('./statdata/systems_'+target_name+'_'+date + '.json'):
                 systems = pd.read_json('./statdata/systems_'+target_name+'_'+date + modestr + '.json')
                 factions = pd.read_json('./statdata/factions_'+target_name+'_'+date + modestr + '.json')
-                #systems.set_index("name", inplace=True)
-                #factions.set_index('id', inplace=True)
 
-                result.append([date, systems, factions])
+                if mode == '':
+                    if (time.time() - time.mktime(time.strptime(date))) < (90 * 24 * 60 * 60 + 1):
+                        result.append([date, systems, factions, False])
+                    else:
+                        # remove files older than 90 days and do not load them into self.factionstats
+                        # they will not appear in the factionstat file after saving of self.factionstats
+                        os.remove('./statdata/systems_'+target_name+'_'+date + modestr + '.json')
+                        os.remove('./statdata/factions_'+target_name+'_'+date + modestr + '.json')
+
+                else:
+                    result.append([date, systems, factions, False])
+
         return result
 
     def fn_update(self, target_name):
@@ -458,6 +498,8 @@ class FactionStats:
 
         updatelist = []
 
+        # in place modification of last entry in factionstat, if necessary
+        # create only pointers, not independent copies
         systems = self.factionstat[-1][1].copy(deep=False)
         factions = self.factionstat[-1][2].copy(deep=False)
 
@@ -564,6 +606,8 @@ class FactionStats:
 
                 if (recentupdate or influenceupdate) and (system not in updatelist):
                     updatelist.append(system)
+                    # mark entry as updated for saving
+                    self.factionstat[-1][3] = True
 
             # unknown system in which the faction is present - possibly due to recent expansion
             else:
@@ -572,7 +616,7 @@ class FactionStats:
         return updatelist
 
 
-    def fn_update_google_sheet(self, target_name):
+    def fn_update_google_sheet(self, target_name, reuse_history=False):
 
         def fn_tick_time(dt):
             # imports a datetime object and assuming that the tick occurs at 22:50 PM (UTC) every day
@@ -595,7 +639,12 @@ class FactionStats:
 
         currenttime = fn_tick_time(datetime.datetime.fromtimestamp(time.time() + time.timezone).replace(microsecond=0))
 
-        history, systemlist = self.fn_get_system_history()
+        if reuse_history:
+            history = self.history
+            systemlist = self.systemlist
+        else:
+            history, systemlist = self.fn_get_system_history()
+
         results = pd.DataFrame(columns=['System', 'Influence', 'Influence Change 1 Day', 'Influence Change 5 Days',
                                         'Updated'])
 
@@ -617,7 +666,7 @@ class FactionStats:
             if system not in history[-1].keys():
                 continue
 
-            if system == 'Aymarahuara':
+            if system == 'Ix Chodharr':
                 pass
 
             faction_row = history[-1][system].loc[(history[-1][system]['Faction'] == target_name)]
@@ -657,6 +706,8 @@ class FactionStats:
                 influencedelta = faction_row['Influence'].iloc[0] - influence
                 if previous_timedelta.total_seconds() < 24 * 60 * 60:
                     influencedelta1 = influencedelta
+                    # for the case that no data exist until more than 5 days, at least log this one day change
+                    influencedelta5 = influencedelta
                 elif previous_timedelta.total_seconds() < 5 * 24 * 60 * 60:
                     influencedelta5 = influencedelta
 
@@ -824,11 +875,84 @@ def fn_recreate_factionstat_csv_():
         for entry in finalfilelist:
             writer.writerow([entry])
 
+# ----------------------------------------------------------------------------------------------------------------------
 
-    pass
+def fnInfLoop(targetlist, webpublishing):
+
+    rundaily = False
+    while True:
+
+        if (datetime.datetime.now().hour <  2):
+            rundaily = False
+        elif not rundaily:
+            while not rundaily:
+                try:
+                    fnDailyUpdate(targetlist=targetlist, webpublishing=webpublishing)
+                    rundaily = True
+                except:
+                    pass
+
+        try:
+            fnPointUpdate(targetlist=targetlist, webpublishing=webpublishing)
+        except:
+            pass
+
+        time.sleep(10*60)
+
+
+
+def fnDailyUpdate(targetlist, webpublishing):
+    # Download lates EDDB dump only once
+    print ('Updating from EDDB')
+    print (datetime.datetime.now())
+
+    fn_update_from_eddb()
+
+    for target_name in targetlist:
+        # Create oject and load previous factionstat data if existent
+        print ('load faction data')
+        print (datetime.datetime.now())
+        factionstats = FactionStats(target_name)
+        # Add recent and new faction data from current dump to factionstat
+        print ('parse eddb dump')
+        print (datetime.datetime.now())
+        factionstats.fn_pull_data_from_json(target_name)
+        # Save factionstat
+        print ('save faction data')
+        print (datetime.datetime.now())
+        factionstats.fn_save_factionstat(target_name)
+        # Plot from factionstat
+        print ('make plots')
+        print (datetime.datetime.now())
+        factionstats.fn_plot_system_history(target_name, webpublishing=webpublishing)
+
+
+
+def fnPointUpdate(targetlist, webpublishing):
+    currenttime = datetime.datetime.fromtimestamp(time.time() + time.timezone).replace(microsecond=0)
+    ticktime = currenttime.replace(hour=22, minute=50)
+
+    for target_name in targetlist:
+        # Create oject and load previous factionstat data if existent
+        print ('load factiondata for update')
+        print (datetime.datetime.now())
+        factionstats = FactionStats(target_name, mode='update')
+        # only plot if there are updates
+        print ('create updatelist')
+        print (datetime.datetime.now())
+        updatelist = factionstats.fn_update(target_name)
+        if updatelist:
+            print ('save faction data')
+            print (datetime.datetime.now())
+            factionstats.fn_save_factionstat(target_name, mode='update')
+            print ('make updated plots')
+            print (datetime.datetime.now())
+            factionstats.fn_plot_system_history(target_name, webpublishing=webpublishing, updatelist=updatelist)
+            print ('update google sheet')
+            print (datetime.datetime.now())
+            factionstats.fn_update_google_sheet(target_name, reuse_history=True)
 
 # main program from command line
-
 if __name__ == '__main__':
 
     webpublishing = True
@@ -838,59 +962,13 @@ if __name__ == '__main__':
     # fn_recreate_factionstat_csv_()
 
     if len(argv) == 1:
-
-        # Download lates EDDB dump only once
-        print ('Updating from EDDB')
-        print (datetime.datetime.now())
-
-        fn_update_from_eddb()
-
-        for target_name in targetlist:
-            # Create oject and load previous factionstat data if existent
-            print ('load faction data')
-            print (datetime.datetime.now())
-            factionstats = FactionStats(target_name)
-            # Add recent and new faction data from current dump to factionstat
-            print ('parse eddb dump')
-            print (datetime.datetime.now())
-            factionstats.fn_pull_data_from_json(target_name)
-            # Save factionstat
-            print ('save faction data')
-            print (datetime.datetime.now())
-            factionstats.fn_save_factionstat(target_name)
-            # Plot from factionstat
-            print ('make plots')
-            print (datetime.datetime.now())
-            factionstats.fn_plot_system_history(target_name, webpublishing=webpublishing)
-
+        fnDailyUpdate(targetlist=targetlist, webpublishing=webpublishing)
     # update from webpage can be run separately or is run immediately after EDDB dump integration
     # short circuit operator or evaluates second expression only if first is false
     if len(argv) == 1 or argv[1] == '-update':
+        fnPointUpdate(targetlist=targetlist, webpublishing=webpublishing)
+    elif argv[1] == '-infloop':
+        fnInfLoop(targetlist=targetlist, webpublishing=webpublishing)
 
-        currenttime = datetime.datetime.fromtimestamp(time.time() + time.timezone).replace(microsecond=0)
-        ticktime = currenttime.replace(hour=22, minute=50)
-
-        for target_name in targetlist:
-            # Create oject and load previous factionstat data if existent
-            print ('load factiondata for update')
-            print (datetime.datetime.now())
-            factionstats = FactionStats(target_name, mode='update')
-            # only plot if there are updates
-            print ('create updatelist')
-            print (datetime.datetime.now())
-            updatelist = factionstats.fn_update(target_name)
-            if updatelist:
-                print ('save faction data')
-                print (datetime.datetime.now())
-                factionstats.fn_save_factionstat(target_name, mode='update')
-                print ('make updated plots')
-                print (datetime.datetime.now())
-                factionstats.fn_plot_system_history(target_name, webpublishing=webpublishing, updatelist=updatelist)
-                print ('update google sheet')
-                print (datetime.datetime.now())
-                factionstats.fn_update_google_sheet(target_name)
-            elif abs((currenttime-ticktime).total_seconds()) < 30 * 60:
-                # perform google sheet update within 30 min of tick independent of changes
-                factionstats.fn_update_google_sheet(target_name)
 
 
